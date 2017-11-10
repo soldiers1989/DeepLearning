@@ -420,9 +420,8 @@ def build_model(_indices, _values, _values2, _shape, _y, _ind, feature_cnt, fiel
 
 	merged_summary = tf.summary.merge_all()
 
+	       #用于训练                用于预测
 	return train_step, loss, error, preds, merged_summary, tmp
-
-
 
 def pre_build_data_cache_if_need(infile, feature_cnt, batch_size):
 	outfile = infile.replace('.csv','.pkl').replace('.txt','.pkl')
