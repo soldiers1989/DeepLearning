@@ -236,7 +236,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
             # layer_0 [hidden_factor: 8, layers[0]: 32]   bias_0 [1, layers[0]: 32]
             # layer_1 [layers[i-1]: 32, layers[i]: 10]    bias_1 [1, layers[i]: 10]
                 
-	        # prediction layer
+          # prediction layer
             glorot = np.sqrt(2.0 / (self.layers[-1] + 1))
             all_weights['prediction'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(self.layers[-1], 1)), dtype=np.float32)  # layers[-1] * 1
             print('prediction [1, [layers[-1]: %d]' % self.layers[-1])
@@ -376,9 +376,9 @@ if __name__ == '__main__':
     # Training
     t1 = time()
     model = NeuralFM(data.features_M, args.hidden_factor, eval(args.layers),
-    	args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda,
-    	eval(args.keep_prob), args.optimizer, args.batch_norm, activation_function,
-    	args.verbose, args.early_stop)
+      args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda,
+      eval(args.keep_prob), args.optimizer, args.batch_norm, activation_function,
+      args.verbose, args.early_stop)
     model.train(data.Train_data, data.Validation_data, data.Test_data)
 
     # Find the best validation result across iterations
