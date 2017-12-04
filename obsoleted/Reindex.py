@@ -7,9 +7,11 @@ import pickle
 class ReindexData(object):
   def __init__(self, inputargs):
     self.args = inputargs
-    self.datapath = args.path           #工作目录
+    self.inputpath = args.inputpath     #输入目录
+    self.outputpath = args.outputpath   #输出目录
     self.inputfiles = args.inputfiles   #待处理文件列表
     self.postfix = args.postfix         #处理结果后缀
+    self.remove_embedding = args.remove_embedding #删除embedding
 
     self.idmap = {}
     self.maxidx = 0
@@ -17,11 +19,12 @@ class ReindexData(object):
     
     self.skipidxline = 0
     self.skipidxfield = 0
+    self.skipembeddingfield = 0
     self.totalline = 0
     self.totalfield = 0
 
     self.idxfile = args.idxfile
-    self.idxfilename = self.datapath + '/' + self.idxfile
+    self.idxfilename = self.inputpath + '/' + self.idxfile
     if args.loadidxfile:
       if os.path.isfile(self.idxfilename):
         self.loadidmap()
@@ -69,6 +72,10 @@ class ReindexData(object):
         if value==0 : continue
         self.totalfield = self.totalfield + 1
         
+        if idx>=406552 and self.remove_embedding:
+        	self.skipembeddingfield = self.skipembeddingfield + 1
+        	continue  # 不再添加index，不处理这个field
+        
         if idx not in self.idmap:
           if not self.appendidx:
             self.skipidxfield = self.skipidxfield+1
@@ -84,16 +91,17 @@ class ReindexData(object):
         break # 遇到StopIteration就退出循环
 
   def run(self):
-    if not os.path.exists(self.datapath):
-      print('Input dir "'+self.datapath+'" NOT EXISTED')
+    if not os.path.exists(self.inputpath):
+      print('Input dir "' + self.inputpath + '" NOT EXISTED')
       exit
     files = self.inputfiles.split('#')
     for f in files:
-      fname = self.datapath+'/'+f
+      fname = self.inputpath + '/' + f
       if not os.path.isfile(fname):
         print('Input file "'+fname+'" NOT EXISTED')
         continue
-      outfname = fname+'.' +self.postfix
+        
+      outfname = self.outputpath + '/' + f +'.' +self.postfix
       with open(outfname, 'w') as outf:
         for label, feature_list in self.load_data_from_file(fname):
           reidx_feature_list=sorted(self.reidx(feature_list), key=lambda a: a[0], reverse=False)
@@ -104,7 +112,7 @@ class ReindexData(object):
 
     self.saveidmap()
     print('Total line '+str(self.totalline)+', field: '+str(self.totalfield))
-    print('Skip line '+str(self.skipidxline)+', field: '+str(self.skipidxfield))
+    print('Skip line '+str(self.skipidxline)+', field: '+str(self.skipidxfield)+', embedding: '+str(self.skipembeddingfield))
 
   def saveidmap(self):
     tosave = {"map":self.idmap, "maxidx":self.maxidx}
@@ -127,8 +135,10 @@ def str2bool(v):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Run Reindex.")
-  parser.add_argument('--path', default='data/', required=True,
+  parser.add_argument('--inputpath', default='data/', required=True,
             help='Input data path.')
+  parser.add_argument('--outputpath', default='data/', required=True,
+            help='Output data path.')
   parser.add_argument('--inputfiles', nargs='?', default='', required=True,
             help='Choose inputfiles, seperated by #.')
   parser.add_argument('--postfix', default='ridx',
@@ -139,6 +149,8 @@ if __name__ == '__main__':
             help='Loading existed index.')
   parser.add_argument('--appendidx', type=str2bool, default=False,
             help='Add new index. If idxfile NOT EXISTED, it will set to True')
+  parser.add_argument('--remove_embedding', type=str2bool, default=False,
+            help='Remove Embedding Feature')
   args = parser.parse_args()
   reindexdata = ReindexData(args)
   reindexdata.run()

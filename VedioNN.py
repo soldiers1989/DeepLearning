@@ -13,20 +13,20 @@ Auc: 78.12%
 @references:
 --dataset frappe --hidden_factor 8 --layers [32,10] --keep_prob [0.8,0.5] --loss_type square_loss --activation relu --pretrain 0 --optimizer AdagradOptimizer --lr 0.05 --batch_norm 1 --verbose 1 --early_stop 1 --epoch 200
 '''
-import os
-import sys
+import argparse
 import math
+from time import time
+
 import numpy as np
 import tensorflow as tf
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
-from time import time
-import argparse
-import LoadDataVedio as VDATA
-from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
+from sklearn.metrics import mean_squared_error
 from sklearn.metrics import roc_auc_score
+from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
+
+from dataprocessing import LoadDataVedio as VDATA
+
 
 #################### Arguments ####################
 def parse_args():

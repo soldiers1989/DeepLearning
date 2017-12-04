@@ -121,3 +121,5 @@ class LoadData(object):
 
 data = LoadData('data', '2017110520', 0.2)
 print(data.features_M)
+print(data.Validation_data)
+print(data.Validation_data['X'].sharp())

@@ -9,7 +9,6 @@ Accuracy: 79.75%
 Auc: 78.12%
 
 
-
 @references:
 --dim 543 --dataset 20171031data.head.ridx 20171031data.head.ridx --testset --hidden_factor 8 --layers [32,10] --keep_prob [0.8,0.5] --loss_type square_loss --activation relu --pretrain 0 --optimizer AdagradOptimizer --lr 0.05 --batch_norm 1 --verbose 1 --early_stop 1 --epoch 200
 
@@ -26,7 +25,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
 from time import time
 import argparse
-from LibSVMFormatInput import LoadLibSvmData
+from LibSVMInput import LoadLibSvmDataV2
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 from sklearn.metrics import roc_auc_score
 
@@ -34,11 +33,10 @@ from sklearn.metrics import roc_auc_score
 #################### Arguments ####################
 
 class SimpleNN(BaseEstimator, TransformerMixin):
-  def __init__(self, args, traindata, testdata, layers, keep_prob, random_seed=0):
+  def __init__(self, args, dataset, layers, keep_prob, random_seed=0):
     self.args = args
-    self.dim = args.dim
-    self.traindata = traindata
-    self.testdata = testdata
+    self.dim = dataset.dim
+    self.dataset = dataset
 
     # bind params to class
     self.batch_size = args.batch_size
@@ -48,6 +46,13 @@ class SimpleNN(BaseEstimator, TransformerMixin):
     self.loss_type = args.loss_type
     self.keep_prob = np.array(keep_prob)
     self.no_dropout = np.array([1 for i in range(len(keep_prob))])
+
+    l2param=eval(args.lambda_nn_l2)
+    l2param.reverse()
+    while len(l2param) < len(layers):
+      l2param.append(0)
+    l2param.reverse()
+    self.lambda_nn_l2 = np.array(l2param)
 
     self.learning_rate = args.lr
     self.batch_norm = args.batch_norm
@@ -70,8 +75,10 @@ class SimpleNN(BaseEstimator, TransformerMixin):
 
     # performance of each epoch
     self.train_rmse, self.valid_rmse = [], []
-    print(self.keep_prob)
-    print(self.no_dropout)
+    print('self.keep_prob: '+str(self.keep_prob))
+    print('self.no_dropout: '+str(self.no_dropout))
+    print('self.lambda_nn_l2: '+str(self.lambda_nn_l2))
+    print('self.lambda_pred_l2: '+str(args.lambda_pred_l2))
     # init all variables in a tensorflow graph
     self._init_graph()
 
@@ -85,8 +92,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
       if self.random_seed > 0:
         tf.set_random_seed(self.random_seed)
 
-      self.lambda_nn_l2 = tf.constant(args.lambda_nn_l2, name='lambda_nn_l2')
-      self.lambda_pred_l2 = tf.constant(args.lambda_nn_l2, name='lambda_pred_l2')
+      self.lambda_pred_l2 = tf.constant(args.lambda_pred_l2, name='lambda_pred_l2')
       self.l2_norm_init = tf.constant(0.0, name='l2_init')
 
       # Input data.
@@ -94,6 +100,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
         self.train_features = tf.placeholder(tf.float32, shape=[None, None], name='train_features')  # None * features_M
         self.train_labels = tf.placeholder(tf.float32, shape=[None, 1], name='train_labels')  # None * 1
         self.dropout_keep = tf.placeholder(tf.float32, shape=[None], name='dropout_keep')
+        self.nn_l2 = tf.placeholder(tf.float32, shape=[None], name='lambda_l2')
         self.train_phase = tf.placeholder(tf.bool, name='train_phase')
 
       # Variables.
@@ -114,16 +121,22 @@ class SimpleNN(BaseEstimator, TransformerMixin):
                                             scope_bn='bn_%d' % i)  # None * layer[i] * 1
           self.NN = self.activation_function(self.NN)
           self.NN = tf.nn.dropout(self.NN, self.dropout_keep[i])  # dropout at each Deep layer
-          
-          layerl2 = tf.multiply(self.lambda_nn_l2, tf.reduce_sum(tf.pow(self.weights[layername], 2)))
+
+          layerl2 = tf.multiply(self.nn_l2[i], tf.reduce_sum(tf.pow(self.weights[layername], 2)))
           self.l2_norm += layerl2
-          
-          summaries.append(tf.summary.scalar("layerl2", layerl2))
-          summaries.append(tf.summary.scalar("layerl2sum", self.l2_norm))
+
+          summaries.append(tf.summary.scalar("l2", layerl2))
+          summaries.append(tf.summary.scalar("l2sum", self.l2_norm))
 
       with tf.name_scope('pred') as scope:
         self.NN = tf.matmul(self.NN, self.weights['prediction'])  # None * 1
         self.out = tf.add(self.NN, self.weights['bias'])
+
+        predl2 = tf.multiply(self.lambda_pred_l2, tf.reduce_sum(tf.pow(self.weights['prediction'], 2)))
+        self.l2_norm += predl2
+
+        summaries.append(tf.summary.scalar("l2", predl2))
+        summaries.append(tf.summary.scalar("l2sum", self.l2_norm))
 
         # Compute the loss.
         if self.loss_type == 'square_loss':
@@ -133,12 +146,6 @@ class SimpleNN(BaseEstimator, TransformerMixin):
           self.loss = tf.add(
             tf.contrib.losses.log_loss(self.out, self.train_labels, weights=1.0, epsilon=1e-07, scope=None),
             self.l2_norm)
-            
-        predl2 = tf.multiply(self.lambda_pred_l2, tf.reduce_sum(tf.pow(self.weights['prediction'], 2)))
-        self.l2_norm += predl2
-        
-        summaries.append(tf.summary.scalar("predl2", predl2))
-        summaries.append(tf.summary.scalar("layerl2sum", self.l2_norm))
 
       # Summary.
       self.summary_op = tf.summary.merge(summaries)
@@ -213,12 +220,17 @@ class SimpleNN(BaseEstimator, TransformerMixin):
                           is_training=True, reuse=None, trainable=True, scope=scope_bn)
     bn_inference = batch_norm(x, decay=0.9, center=True, scale=True, updates_collections=None,
                               is_training=False, reuse=True, trainable=True, scope=scope_bn)
-    z = tf.cond(train_phase, lambda: bn_train, lambda: bn_inference)  # Ԥ���ѵ���߲�ͬ�ķ�֧
+    z = tf.cond(train_phase, lambda: bn_train, lambda: bn_inference)
     return z
 
   def partial_fit(self, data, summary_writer, step):  # fit a batch
-    feed_dict = {self.train_features: data['X'], self.train_labels: [[y] for y in data['Y']],
-                 self.dropout_keep: self.keep_prob, self.train_phase: True}
+    if len(data['Y'])==0:
+      return 0.0
+    feed_dict = {self.train_features: data['X'],
+                 self.train_labels: [[y] for y in data['Y']],
+                 self.dropout_keep: self.keep_prob,
+                 self.nn_l2: self.lambda_nn_l2,
+                 self.train_phase: True}
     loss, opt, summary = self.sess.run((self.loss, self.optimizer, self.summary_op), feed_dict=feed_dict)
     summary_writer.add_summary(summary, step)
     return loss
@@ -227,48 +239,65 @@ class SimpleNN(BaseEstimator, TransformerMixin):
     # Check Init performance
     if self.verbose > 0:
       t2 = time()
-      Train_data = self.traindata.read_labels_features_map_batch(self.batch_size)
-      Validation_data = self.testdata.read_labels_features_map_batch(self.batch_size)
+      Train_data = self.dataset.read_traindata_batch(self.batch_size)
+      Validation_data = self.dataset.read_testdata_batch(self.batch_size)
 
       init_train, init_train_auc = self.evaluate(Train_data)
       init_valid, init_valid_auc = self.evaluate(Validation_data)
       print("Init: \t train=%.4f, validation=%.4f train auc=%.4f, validation auc=%.4f[%.1f s]" % (
-      init_train, init_valid, init_train_auc, init_valid_auc, time() - t2))
+        init_train, init_valid, init_train_auc, init_valid_auc, time() - t2))
 
     summary_writer = tf.summary.FileWriter(self.model_path, graph=self.sess.graph)
 
+    t1 = time()
     for epoch in range(self.epoch):
-      Train_data = self.traindata.read_labels_features_map_batch(self.batch_size)
-      Validation_data = self.testdata.read_labels_features_map_batch(self.batch_size)
-      t1 = time()
+      Train_data = self.dataset.read_traindata_batch(self.batch_size)
       loss = self.partial_fit(Train_data, summary_writer, epoch)
-      t2 = time()
 
-      # output validation
-      train_result, train_result_auc = self.evaluate(Train_data)
-      valid_result, valid_result_auc = self.evaluate(Validation_data)
-
-      # summary info
-      summary = tf.Summary(value=[
-        tf.Summary.Value(tag="train_loss", simple_value=train_result),
-        tf.Summary.Value(tag="train_auc", simple_value=train_result_auc),
-        tf.Summary.Value(tag="test_loss", simple_value=valid_result),
-        tf.Summary.Value(tag="test_auc", simple_value=valid_result_auc),
-      ])
-      summary_writer.add_summary(summary, epoch)
-      # summary_op = tf.summary.merge(summaries)
-      # summary_writer.add_summary(self.sess.run(summary_op), epoch)
-
-      self.train_rmse.append(train_result)
-      self.valid_rmse.append(valid_result)
-      if self.verbose > 0 and epoch % self.verbose == 0:
-        print("Epoch %d [%.1f s]\ttrain=%.4f auc=%.4f, valid=%.4f auc=%.4f, loss=%.4f [%.1f s]"
-              % (epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
-      if self.early_stop > 0 and self.eva_termination(self.valid_rmse):
-        # print "Early stop at %d based on validation result." %(epoch+1)
-        break
+      if epoch%10==0:       
+        t2 = time()
+        # output validation
+        train_result, train_result_auc = self.evaluate(Train_data)        
+        Validation_data = self.dataset.read_testdata_batch(self.batch_size)
+        valid_result, valid_result_auc = self.evaluate(Validation_data)
+  
+        # summary info
+        summary = tf.Summary(value=[
+          tf.Summary.Value(tag="train_loss", simple_value=train_result),
+          tf.Summary.Value(tag="train_auc", simple_value=train_result_auc),
+          tf.Summary.Value(tag="test_loss", simple_value=valid_result),
+          tf.Summary.Value(tag="test_auc", simple_value=valid_result_auc),
+        ])
+        summary_writer.add_summary(summary, epoch)
+  
+        self.train_rmse.append(train_result)
+        self.valid_rmse.append(valid_result)
+        if self.verbose > 0 and epoch % self.verbose == 0:
+          print("Epoch %d [%.1f s]\ttrain=%.4f auc=%.4f, valid=%.4f auc=%.4f, loss=%.4f [%.1f s]"
+                % (epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
+        
+        t1 = time()
+#      if self.early_stop > 0 and self.eva_termination(self.valid_rmse):
+#        # print "Early stop at %d based on validation result." %(epoch+1)
+#        break
 
     summary_writer.close()
+    if self.dataset.has_predset():
+      self.pred_data()
+
+  def pred_data(self):
+    ret=self.dataset.read_preddata_batch()
+    outfname=args.modelpath + '/' + args.predoutputfile
+
+    with open(outfname, 'w') as outf:
+      while ret['D']>0:
+        num_example = ret['D']      
+        feed_dict = {self.train_features: ret['X'], self.train_labels: [[0] for y in ret['ID']],
+                     self.dropout_keep: self.no_dropout, self.train_phase: False}
+        predictions = self.sess.run((self.out), feed_dict=feed_dict)
+        for k, v in zip(ret['ID'], predictions):
+          outf.write(str(k)+' '+str(v[0])+'\n')
+        ret = self.dataset.read_preddata_batch()
 
   def eva_termination(self, valid):
     #   if self.loss_type == 'square_loss':
@@ -283,6 +312,8 @@ class SimpleNN(BaseEstimator, TransformerMixin):
 
   def evaluate(self, data):  # evaluate the results for an input set
     num_example = len(data['Y'])
+    if num_example==0:
+      return 0.0, 0.0
     feed_dict = {self.train_features: data['X'], self.train_labels: [[y] for y in data['Y']],
                  self.dropout_keep: self.no_dropout, self.train_phase: False}
     predictions = self.sess.run((self.out), feed_dict=feed_dict)
@@ -317,14 +348,24 @@ def str2bool(v):
 
 def parse_args():
   parser = argparse.ArgumentParser(description="Run Simple NN.")
-  parser.add_argument('--dim', type=int, default=6309,
-                      help='Dimension of data.')
-  parser.add_argument('--path', nargs='?', default='/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/data/msg.org',
+  parser.add_argument('--inputpath', nargs='?', default='./data',
                       help='Input data path.')
-  parser.add_argument('--dataset', nargs='?', default='20171101data.ridx#20171102data.ridx',
+  parser.add_argument('--statfile', default='statfile', required=False,
+                      help='stat mapping file.')                      
+  parser.add_argument('--remove_lowfeq', type=int, default=0,
+                      help='Remove Low Frequence Feature (include)')                      
+  parser.add_argument('--remove_feature', default='embed1#embed2', required=False,
+                      help='Remove Some Feature')
+  parser.add_argument('--feature_cross', type=str2bool, default=True,
+                      help='cross feature.')
+  parser.add_argument('--dataset', nargs='+', default=['20171101data.ridx','20171102data.ridx'],
                       help='Choose a dataset.')
-  parser.add_argument('--testset', nargs='?', default='20171103data.ridx',
+  parser.add_argument('--testset', nargs='+', default=['20171103data.ridx'],
                       help='Choose a dataset.')
+  parser.add_argument('--predset', nargs='+', default=[],
+                      help='Choose a pred dataset.')
+  parser.add_argument('--predoutputfile', nargs='?', default='predresult',
+                      help='Choose a pred dataset.')
   parser.add_argument('--modelpath', nargs='?', default='/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/data/model',
                       help='Save the model.')
   parser.add_argument('--epoch', type=int, default=200,
@@ -349,10 +390,10 @@ def parse_args():
                       help='Which activation function to use for deep layers: relu, sigmoid, tanh, identity')
   parser.add_argument('--early_stop', type=int, default=1,
                       help='Whether to perform early stop (0 or 1)')
-  parser.add_argument('--lambda_nn_l2', type=float, default=0.0001,
-                      help='Regulation parameter lambda for NN')
-  parser.add_argument('--lambda_pred_l2', type=float, default=0.0001,
+  parser.add_argument('--lambda_nn_l2', nargs='?', default='[0.0,0.0001]',
                       help='Regulation parameter lambda for pred')
+  parser.add_argument('--lambda_pred_l2', type=float, default=0.0001,
+                      help='Regulation parameter lambda for NN')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
 
@@ -362,18 +403,14 @@ def parse_args():
 if __name__ == '__main__':
   # Data loading
   args = parse_args()
-  print(args)
-  dataset = [args.path + '/' + item for item in args.dataset.split('#')]
-  testset = [args.path + '/' + item for item in args.testset.split('#')]
-  traindata = LoadLibSvmData(dim=args.dim, files=dataset, shuffleFile=args.shuffle_file)
-  testdata = LoadLibSvmData(dim=args.dim, files=testset, shuffleFile=args.shuffle_file)
-
   if args.verbose > 0:
     print(args)
-
+  
+  dataset=LoadLibSvmDataV2(vars(args))
+  
   # Training
   t1 = time()
-  model = SimpleNN(args, traindata, testdata, eval(args.layers), eval(args.keep_prob))
+  model = SimpleNN(args, dataset, eval(args.layers), eval(args.keep_prob))
   model.train()
 
   # Find the best validation result across iterations
