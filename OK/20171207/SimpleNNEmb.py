@@ -31,7 +31,6 @@ from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 from tensorflow.contrib.tensorboard.plugins import projector
 from LibSVMInputEmb import LoadLibSvmDataV2
 
-
 #################### Arguments ####################
 
 class SimpleNNEmb(BaseEstimator, TransformerMixin):
@@ -69,6 +68,7 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
       self.activation_function = tf.identity
 
     self.feature_embedding = args.feature_embedding
+    self.embedding_conf = dataset.embedding_conf
     self.embedding_size = args.embedding_size
 
     self.model_path = args.modelpath
@@ -108,7 +108,12 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
       with tf.name_scope('input') as scope:
         self.train_features = tf.placeholder(tf.float32, shape=[None, None],
                                              name='train_features')  # None * features_M
-        self.input_bizuin_emb = tf.placeholder(tf.int32, [None], name="input_bizuin")
+
+        self.input_emb = []
+        # [(0, (11, 'bizuin', 1, 10000, 406417, 416416, 5, 2252, 2256), 6), (1, (0, 'agebucket', 1, 10, 1, 10, 7, 1, 7), 8)]
+        for item in self.embedding_conf:
+          self.input_emb.append(tf.placeholder(tf.int32, [None], name='input_emb_' + item[1][1]))
+
         self.train_labels = tf.placeholder(tf.float32, shape=[None, 1], name='train_labels')  # None * 1
         self.dropout_keep = tf.placeholder(tf.float32, shape=[None], name='dropout_keep')
         self.nn_l2 = tf.placeholder(tf.float32, shape=[None], name='lambda_l2')
@@ -120,20 +125,23 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
       summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
       # Model.
       # ________ Deep Layers __________
-      self.embedded_bizuin = tf.nn.embedding_lookup(self.weights['emb_0'], self.input_bizuin_emb)
+      # self.embedded_bizuin = tf.nn.embedding_lookup(self.weights['emb_0'], self.input_emb[0])
+      self.embedded_lookup = []
 
       # concat all input
       with tf.name_scope("input_concat"):
-        input_all = [self.train_features, self.embedded_bizuin]
-        self.input_all = tf.concat(input_all, axis=1)
+        input_all = [self.train_features]
+        for idx, item in enumerate(self.embedding_conf):
+          embedded_lookup_item = tf.nn.embedding_lookup(self.weights['weight_emb_' + item[1][1]], self.input_emb[idx])
+          self.embedded_lookup.append(embedded_lookup_item)
+          input_all.append(embedded_lookup_item)
+        self.NN = tf.concat(input_all, axis=1)
 
-      # self.NN = self.train_features
-      self.NN = self.input_all
-
-      # self.l2_norm = self.l2_norm_init
-      self.l2_norm = tf.multiply(self.lambda_emb_l2, tf.reduce_sum(tf.pow(self.embedded_bizuin, 2)))
-      summaries.append(tf.summary.scalar("emb_l2", self.l2_norm))
-      # self.l2_norm += predl2
+      self.l2_norm = self.l2_norm_init
+      for idx, item in enumerate(self.embedded_lookup):
+        itemloss = tf.multiply(self.lambda_emb_l2, tf.reduce_sum(tf.pow(self.embedded_lookup[idx], 2)))
+        summaries.append(tf.summary.scalar("emb_l2_" + str(idx), itemloss))
+        self.l2_norm += itemloss
 
       for i in range(0, len(self.layers)):
         layername = 'layer_%d' % i
@@ -209,16 +217,13 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
 
     emb_dim = 0
     if self.feature_embedding:
-      item = self.dataset.embedding_conf[0]
-      #      all_weights['emb_0'] = tf.Variable(tf.random_uniform([item[2], self.embedding_size], -1.0, 1.0),
-      #                  name="emb_0")
-      all_weights['emb_0'] = tf.Variable(tf.zeros([item[2], self.embedding_size], tf.float32), name="emb_0")
-      emb_dim += self.embedding_size
+      for idx, item in enumerate(self.embedding_conf):
+        weight_name = 'weight_emb_' + item[1][1]
+        all_weights[weight_name] = tf.Variable(tf.zeros([item[2], self.embedding_size], tf.float32), name=weight_name)
+        emb_dim += self.embedding_size
 
     glorot = np.sqrt(2.0 / (self.dim + emb_dim + self.layers[0]))
-    all_weights['layer_0'] = tf.Variable(
-      np.random.normal(loc=0, scale=glorot, size=(self.dim + emb_dim, self.layers[0])),
-      dtype=np.float32)
+    all_weights['layer_0'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(self.dim + emb_dim, self.layers[0])),dtype=np.float32)
     print('layer_0 [input: %d, layers[0]: %d]' % (self.dim + emb_dim, self.layers[0]))
 
     for i in range(1, num_layer):
@@ -260,11 +265,13 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
     if len(data['Y']) == 0:
       return 0.0
     feed_dict = {self.train_features: data['X'],
-                 self.input_bizuin_emb: [e[0] for e in data['E']],
                  self.train_labels: [[y] for y in data['Y']],
                  self.dropout_keep: self.keep_prob,
                  self.nn_l2: self.lambda_nn_l2,
                  self.train_phase: True}
+    for idx, item in enumerate(self.embedded_lookup):
+      feed_dict[self.input_emb[idx]] = [e[idx] for e in data['E']]
+
     loss, opt, summary = self.sess.run((self.loss, self.optimizer, self.summary_op), feed_dict=feed_dict)
     summary_writer.add_summary(summary, step)
     return loss
@@ -283,10 +290,11 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
 
     summary_writer = tf.summary.FileWriter(self.model_path, graph=self.sess.graph)
 
-    config = projector.ProjectorConfig()
-    embedding_conf = config.embeddings.add()
-    embedding_conf.tensor_name = 'emb_0'
-    projector.visualize_embeddings(summary_writer, config)
+    for item in self.embedding_conf:
+      config = projector.ProjectorConfig()
+      embedding_conf = config.embeddings.add()
+      embedding_conf.tensor_name = 'weight_emb_' + item[1][1]
+      projector.visualize_embeddings(summary_writer, config)
 
     t1 = time()
     for epoch in range(self.epoch):
@@ -318,7 +326,8 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
         if self.verbose > 0 and epoch % self.verbose == 0:
           print("Epoch %d [%.1f s]\ttrain=%.4f auc=%.4f, valid=%.4f auc=%.4f, loss=%.4f [%.1f s]"
                 % (
-                epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
+                  epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss,
+                  time() - t2))
 
         t1 = time()
 
@@ -336,9 +345,11 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
       while ret['D'] > 0:
         num_example = ret['D']
         feed_dict = {self.train_features: ret['X'],
-                     self.input_bizuin_emb: [e[0] for e in data['E']],
                      self.dropout_keep: self.no_dropout,
                      self.train_phase: False}
+        for idx, item in enumerate(self.embedded_lookup):
+          feed_dict[self.input_emb[idx]] = [e[idx] for e in ret['E']]
+
         predictions = self.sess.run((self.out), feed_dict=feed_dict)
         for k, v in zip(ret['ID'], predictions):
           outf.write(str(k) + ' ' + str(v[0]) + '\n')
@@ -360,10 +371,12 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
     if num_example == 0:
       return 0.0, 0.0
     feed_dict = {self.train_features: data['X'],
-                 self.input_bizuin_emb: [e[0] for e in data['E']],
                  self.train_labels: [[y] for y in data['Y']],
                  self.dropout_keep: self.no_dropout,
                  self.train_phase: False}
+    for idx, item in enumerate(self.embedded_lookup):
+      feed_dict[self.input_emb[idx]] = [e[idx] for e in data['E']]
+
     predictions = self.sess.run((self.out), feed_dict=feed_dict)
     y_pred = np.reshape(predictions, (num_example,))
     y_true = np.reshape(data['Y'], (num_example,))
@@ -408,7 +421,7 @@ def parse_args():
                       help='Remove Some Feature')
   parser.add_argument('--feature_cross', type=str2bool, default=False,
                       help='cross feature.')
-  parser.add_argument('--feature_embedding', type=str2bool, default=True,
+  parser.add_argument('--feature_embedding', nargs='*', default=[], required=False,
                       help='embedding feature.')
   parser.add_argument('--embedding_size', type=int, default=6,
                       help='embedding feature size.')

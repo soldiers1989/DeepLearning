@@ -327,7 +327,7 @@ class LoadLibSvmDataV2(object):
     # embedding feature
     self.embedding_raw_feature_map = {} 
     self.embedding_conf = []
-    self.create_embedding_lookup_info()
+    self.create_embedding_lookup_info(inputargs['feature_embedding'])
     self.emb_fnum = len(self.embedding_conf)
 
     self.dataset = [self.inputpath + item for item in inputargs['dataset']]
@@ -459,20 +459,21 @@ class LoadLibSvmDataV2(object):
     item=self.fine_feature_conf_by_name(fname)
     
     offset = 0
+    idx=(len(self.embedding_conf))
     for ii in range(item[self.CONF_INDEX_ORG_BEGIN], item[self.CONF_INDEX_ORG_END] + 1):
-      if ii in self.idmap.keys():
-        self.embedding_raw_feature_map[ii] = (0, offset)
+      if ii in self.idmap.keys():      	
         offset += 1
-    self.embedding_conf.append((len(self.embedding_conf), item, offset+1))
+        self.embedding_raw_feature_map[ii] = (idx, offset)
+    self.embedding_conf.append((idx, item, offset+1))
 
-  def create_embedding_lookup_info(self):
+  def create_embedding_lookup_info(self, embedding_feature):
     self.embedding_raw_feature_map = {}    
     self.embedding_conf = []
-    item=self.create_embedding_lookup_info_item('bizuin')
-    item=self.create_embedding_lookup_info_item('agebucket')
+    for ii in list(set(embedding_feature)):
+      self.create_embedding_lookup_info_item(ii)
 
-    print(self.embedding_raw_feature_map)
-    print(self.embedding_conf)
+    print('embedding_raw_feature_map: '+str(self.embedding_raw_feature_map))
+    print('embedding_conf: '+str(self.embedding_conf))
     # {408129: (0, 3), 411139: (0, 6), 414783: (0, 11), 406731: (0, 1), 414828: (0, 12), 412974: (0, 10), 407531: (0, 2), 408304: (0, 4), 411441: (0, 7), 406487: (0, 0), 412346: (0, 9), 409183: (0, 5), 412063: (0, 8)}
 
   def processing_feature(self, fields):
@@ -641,8 +642,10 @@ if __name__ == '__main__':
                       help='Remove Low Frequence Feature (include)')
   parser.add_argument('--statfile', default='statfile', required=False,
                       help='stat mapping file.')
-  parser.add_argument('--feature_cross', type=str2bool, default=True,
-                      help='cross feature.')
+  parser.add_argument('--feature_cross', type=str2bool, default=False,
+                      help='cross feature.')                      
+  parser.add_argument('--feature_embedding', nargs='*', default=[], required=False,
+                      help='embedding feature.')
   parser.add_argument('--printinfoanddata', type=str2bool, default=True,
                       help='print stat info.')
   args = parser.parse_args()
