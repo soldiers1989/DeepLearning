@@ -17,6 +17,7 @@ from sklearn.metrics import roc_auc_score
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 
 from LibSVMInputEmbAnsy import LoadLibSvmDataV2
+
 #################### Arguments ####################
 
 class SimpleNN(BaseEstimator, TransformerMixin):
@@ -37,7 +38,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
     self.keep_prob = np.array(keep_prob)
     self.no_dropout = np.array([1 for i in range(len(keep_prob))])
 
-    l2param=eval(args.lambda_nn_l2)
+    l2param = eval(args.lambda_nn_l2)
     l2param.reverse()
     while len(l2param) < len(layers):
       l2param.append(0)
@@ -65,10 +66,10 @@ class SimpleNN(BaseEstimator, TransformerMixin):
 
     # performance of each epoch
     self.train_rmse, self.valid_rmse = [], []
-    print('self.keep_prob: '+str(self.keep_prob))
-    print('self.no_dropout: '+str(self.no_dropout))
-    print('self.lambda_nn_l2: '+str(self.lambda_nn_l2))
-    print('self.lambda_pred_l2: '+str(args.lambda_pred_l2))
+    print('self.keep_prob: ' + str(self.keep_prob))
+    print('self.no_dropout: ' + str(self.no_dropout))
+    print('self.lambda_nn_l2: ' + str(self.lambda_nn_l2))
+    print('self.lambda_pred_l2: ' + str(args.lambda_pred_l2))
     # init all variables in a tensorflow graph
     self._init_graph()
 
@@ -120,6 +121,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
           summaries.append(tf.summary.scalar("l2sum", self.l2_norm))
 
       with tf.name_scope('pred') as scope:
+        self.NN = tf.concat([self.NN, self.train_features], axis=1)
         self.NN = tf.matmul(self.NN, self.weights['prediction'])  # None * 1
         self.out = tf.add(self.NN, self.weights['bias'])
 
@@ -140,19 +142,21 @@ class SimpleNN(BaseEstimator, TransformerMixin):
 
       with tf.name_scope('opt') as scope:
         self.decay_learning_rate = tf.train.exponential_decay(self.learning_rate,
-          self.train_step, 100, 0.98, staircase=True)
+                                                              self.train_step, 100, 0.98, staircase=True)
 
         # Optimizer.
         if self.optimizer_type == 'AdamOptimizer':
           self.optimizer = tf.train.AdamOptimizer(learning_rate=self.decay_learning_rate, beta1=0.9, beta2=0.999,
-                                                  epsilon=1e-8) #.minimize(self.loss)
+                                                  epsilon=1e-8)  # .minimize(self.loss)
         elif self.optimizer_type == 'AdagradOptimizer':
           self.optimizer = tf.train.AdagradOptimizer(learning_rate=self.decay_learning_rate,
-                                                     initial_accumulator_value=1e-8) #.minimize(self.loss)
+                                                     initial_accumulator_value=1e-8)  # .minimize(self.loss)
         elif self.optimizer_type == 'GradientDescentOptimizer':
-          self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.decay_learning_rate) #.minimize(self.loss)
+          self.optimizer = tf.train.GradientDescentOptimizer(
+            learning_rate=self.decay_learning_rate)  # .minimize(self.loss)
         elif self.optimizer_type == 'MomentumOptimizer':
-          self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.decay_learning_rate, momentum=0.95) #.minimize(self.loss)
+          self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.decay_learning_rate,
+                                                      momentum=0.95)  # .minimize(self.loss)
 
         self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
         self.train_op = self.optimizer.apply_gradients(self.grads_and_vars, global_step=self.global_step)
@@ -170,7 +174,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
             summaries.append(reduce_min_summary)
 
         summaries.append(tf.summary.scalar("decay_learning_rate", self.decay_learning_rate))
-            
+
       with tf.name_scope('weight') as scope:
         for k in self.weights:
           v=self.weights[k]
@@ -182,7 +186,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
           summaries.append(reduce_max_summary)
           reduce_min_summary = tf.summary.scalar("{}/weight/min".format(k), tf.reduce_min(v))
           summaries.append(reduce_min_summary)
-          
+            
       self.summary_op = tf.summary.merge(summaries)
 
       # init
@@ -231,10 +235,10 @@ class SimpleNN(BaseEstimator, TransformerMixin):
     all_weights['bias_0'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(1, self.layers[0])),
                                         dtype=np.float32)  # 1 * layers[0]
     print('bias_0 [1, layers[0]: %d]' % self.layers[0])
-    glorot = np.sqrt(2.0 / (self.layers[-1] + 1))
-    all_weights['prediction'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(self.layers[-1], 1)),
+    glorot = np.sqrt(2.0 / (self.layers[-1] + self.dim + 1))
+    all_weights['prediction'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(self.layers[-1] + self.dim, 1)),
                                             dtype=np.float32)  # layers[-1] * 1
-    print('prediction [1, [layers[-1]: %d]' % self.layers[-1])
+    print('prediction [1, [layers[-1]: %d]' % (self.layers[-1] + self.dim))
     # prediction [1, [layers[-1]: 10]
     all_weights['bias'] = tf.Variable(tf.constant(0.0), name='bias')  # 1 * 1
 
@@ -249,7 +253,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
     return z
 
   def partial_fit(self, data, summary_writer, step):  # fit a batch
-    if len(data['Y'])==0:
+    if len(data['Y']) == 0:
       return 0.0
     current_step = tf.train.global_step(self.sess, self.global_step)
     feed_dict = {self.train_features: data['X'],
@@ -258,12 +262,11 @@ class SimpleNN(BaseEstimator, TransformerMixin):
                  self.nn_l2: self.lambda_nn_l2,
                  self.train_phase: True,
                  self.train_step: current_step}
-
-    if step%10==0 and step>100:
+    if step % 10 == 0: # and step > 100:
       loss, opt, summary = self.sess.run((self.loss, self.train_op, self.summary_op), feed_dict=feed_dict)
       summary_writer.add_summary(summary, step)
     else:
-      loss, opt = self.sess.run((self.loss, self.train_op), feed_dict=feed_dict)      
+      loss, opt = self.sess.run((self.loss, self.train_op), feed_dict=feed_dict)
     return loss
 
   def train(self):  # fit a dataset
@@ -285,7 +288,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
       Train_data = self.dataset.read_traindata_batch_ansyc()
       loss = self.partial_fit(Train_data, summary_writer, epoch)
 
-      if epoch%10==0:
+      if epoch % 10 == 0:
         t2 = time()
         # output validation
         train_result, train_result_auc = self.evaluate(Train_data)
@@ -305,7 +308,8 @@ class SimpleNN(BaseEstimator, TransformerMixin):
         self.valid_rmse.append(valid_result)
         if self.verbose > 0 and epoch % self.verbose == 0:
           print("Epoch %d [%.1f s]\ttrain=%.4f auc=%.4f, valid=%.4f auc=%.4f, loss=%.4f [%.1f s]"
-                % (epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
+                % (
+                epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
 
         t1 = time()
 
@@ -314,22 +318,22 @@ class SimpleNN(BaseEstimator, TransformerMixin):
       self.pred_data()
 
   def pred_data(self):
-    ret=self.dataset.read_preddata_batch()
-    outfname=args.modelpath + '/' + args.predoutputfile + self.timestamp
+    ret = self.dataset.read_preddata_batch()
+    outfname = args.modelpath + '/' + args.predoutputfile + self.timestamp
 
     with open(outfname, 'w') as outf:
-      while ret['D']>0:
+      while ret['D'] > 0:
         num_example = ret['D']
         feed_dict = {self.train_features: ret['X'], self.train_labels: [[0] for y in ret['ID']],
                      self.dropout_keep: self.no_dropout, self.train_phase: False}
         predictions = self.sess.run((self.out), feed_dict=feed_dict)
         for k, v in zip(ret['ID'], predictions):
-          outf.write(str(k)+' '+str(v[0])+'\n')
+          outf.write(str(k) + ' ' + str(v[0]) + '\n')
         ret = self.dataset.read_preddata_batch()
 
   def evaluate(self, data):  # evaluate the results for an input set
     num_example = len(data['Y'])
-    if num_example==0:
+    if num_example == 0:
       return 0.0, 0.0
     feed_dict = {self.train_features: data['X'], self.train_labels: [[y] for y in data['Y']],
                  self.dropout_keep: self.no_dropout, self.train_phase: False}
@@ -373,7 +377,7 @@ def parse_args():
                       help='stat mapping file.')
   parser.add_argument('--remove_lowfeq', type=int, default=0,
                       help='Remove Low Frequence Feature (include)')
-  parser.add_argument('--remove_feature', nargs='*',  default=[], required=False,
+  parser.add_argument('--remove_feature', nargs='*', default=[], required=False,
                       help='Remove Some Feature')
   parser.add_argument('--feature_embedding', nargs='*', default=[], required=False,
                       help='embedding feature.')
@@ -392,7 +396,7 @@ def parse_args():
   parser.add_argument('--epoch', type=int, default=200,
                       help='Number of epochs.')
   parser.add_argument('--batch_size', type=int, default=128,
-                      help='Batch size.')                                  
+                      help='Batch size.')
   parser.add_argument('--batch_size_test', type=int, default=128,
                       help='Data batch size')
   parser.add_argument('--layers', nargs='?', default='[128, 64]',

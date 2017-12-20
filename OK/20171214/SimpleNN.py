@@ -2,6 +2,17 @@
 '''
 @author:
 BinCai (bincai@tencent.com)
+
+GBDT Result
+[('vmsg_bizuin_lda_1600', 105.99668455882353), ('cross_province', 87.75745230769229), ('lda_bizuin_lda_1600', 55.670075714285666), ('cross_city', 36.6166), ('ctr_uv', 30.88822170212767), ('vtitle_bizuin_lda_1600', 15.069016690000005), ('vtitle_arttopicdist', 13.682380357142858), ('vmsg_arttopicdist', 12.484228656716423), ('user_genderctr', 12.160503377777781), ('total_friend_count', 11.271676704545458), ('vtitle_vtitle_lda', 11.046604918032783), ('user_ageclickuv', 10.003312222222222), ('click_uv', 9.957362558139536), ('user_age_gender_ctr', 9.703596181818181), ('durationms', 9.449381411214958), ('lda_arttopicdist', 9.290627270270269), ('user_genderclickuv', 8.772856896551719), ('grade', 8.586026666666667), ('biz_fansnum', 8.576318142857147), ('class_bizuin_23', 8.157634561403508), ('user_agectr', 7.989551), ('agebucket', 7.9217675), ('class_vtitle_23', 7.768969099999998), ('age', 7.625786595744681), ('class_article_23', 7.582910281690142), ('vmsg_vtitle_lda', 7.49606126984127), ('play_time_avg', 7.2594665454545435), ('wordcnt', 7.151662857142857), ('lda_vtitle_lda', 6.920818225806451), ('play_time_sum', 6.880941518518519), ('show_uv', 6.6473868965517235), ('genderbucket', 5.812966666666667), ('biz_iscopyright', 4.4117425)]
+Accuracy: 79.75%
+Auc: 78.12%
+
+
+@references:
+--dim 543 --dataset 20171031data.head.ridx 20171031data.head.ridx --testset --hidden_factor 8 --layers [32,10] --keep_prob [0.8,0.5] --loss_type square_loss --activation relu --pretrain 0 --optimizer AdagradOptimizer --lr 0.05 --batch_norm 1 --verbose 1 --early_stop 1 --epoch 200
+
+cd /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/code; python SimpleNN.py --dim 6309 --path /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/data/msg.org --dataset 20171031data.ridx#20171101data.ridx#20171102data.ridx --testset 20171103data.ridx --modelpath /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/data/model --layers [128,32] --keep_prob [0.8,0.5] --loss_type log_loss --activation relu --optimizer AdamOptimizer --lr 0.05 --batch_norm 1 --verbose 1 --early_stop 0 --epoch 200
 '''
 import argparse
 import math
@@ -160,8 +171,8 @@ class SimpleNN(BaseEstimator, TransformerMixin):
         # Summary.
         for g, v in self.grads_and_vars:
           if g is not None:
-            grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
-            summaries.append(grad_hist_summary)
+            #grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
+            #summaries.append(grad_hist_summary)
             sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
             summaries.append(sparsity_summary)
             reduce_max_summary = tf.summary.scalar("{}/grad/max".format(v.name), tf.reduce_max(g))
@@ -170,20 +181,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
             summaries.append(reduce_min_summary)
 
         summaries.append(tf.summary.scalar("decay_learning_rate", self.decay_learning_rate))
-            
-      with tf.name_scope('weight') as scope:
-        for k in self.weights:
-          v=self.weights[k]
-          grad_hist_summary = tf.summary.histogram("{}/weight/hist".format(k), v)
-          summaries.append(grad_hist_summary)
-          sparsity_summary = tf.summary.scalar("{}/weight/sparsity".format(k), tf.nn.zero_fraction(v))
-          summaries.append(sparsity_summary)
-          reduce_max_summary = tf.summary.scalar("{}/weight/max".format(k), tf.reduce_max(v))
-          summaries.append(reduce_max_summary)
-          reduce_min_summary = tf.summary.scalar("{}/weight/min".format(k), tf.reduce_min(v))
-          summaries.append(reduce_min_summary)
-          
-      self.summary_op = tf.summary.merge(summaries)
+        self.summary_op = tf.summary.merge(summaries)
 
       # init
       self.saver = tf.train.Saver()
@@ -258,12 +256,8 @@ class SimpleNN(BaseEstimator, TransformerMixin):
                  self.nn_l2: self.lambda_nn_l2,
                  self.train_phase: True,
                  self.train_step: current_step}
-
-    if step%10==0 and step>100:
-      loss, opt, summary = self.sess.run((self.loss, self.train_op, self.summary_op), feed_dict=feed_dict)
-      summary_writer.add_summary(summary, step)
-    else:
-      loss, opt = self.sess.run((self.loss, self.train_op), feed_dict=feed_dict)      
+    loss, opt, summary = self.sess.run((self.loss, self.train_op, self.summary_op), feed_dict=feed_dict)
+    summary_writer.add_summary(summary, step)
     return loss
 
   def train(self):  # fit a dataset
@@ -393,7 +387,7 @@ def parse_args():
                       help='Number of epochs.')
   parser.add_argument('--batch_size', type=int, default=128,
                       help='Batch size.')                                  
-  parser.add_argument('--batch_size_test', type=int, default=128,
+  parser.add_argument('--batch_size_test', type=int, default=16384,
                       help='Data batch size')
   parser.add_argument('--layers', nargs='?', default='[128, 64]',
                       help="Size of each layer.")
