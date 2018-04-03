@@ -4,22 +4,21 @@
 BinCai (bincai@tencent.com)
 
 '''
-import os
-import sys
-import math
-import datetime
 import argparse
+import datetime
+import math
+import os
 from time import time
+
 import numpy as np
 import tensorflow as tf
+from LibSVMInputEmbAnsy import LoadLibSvmDataV2
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
+from sklearn.metrics import mean_squared_error
 from sklearn.metrics import roc_auc_score
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 from tensorflow.contrib.tensorboard.plugins import projector
-from LibSVMInputEmbAnsy import LoadLibSvmDataV2
 
 
 #################### Arguments ####################

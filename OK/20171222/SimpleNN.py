@@ -4,19 +4,20 @@
 BinCai (bincai@tencent.com)
 '''
 import argparse
-import math
 import datetime
+import math
 from time import time
 
 import numpy as np
 import tensorflow as tf
+from LibSVMInputEmbAnsy import LoadLibSvmDataV2
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import log_loss
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import roc_auc_score
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 
-from LibSVMInputEmbAnsy import LoadLibSvmDataV2
+
 #################### Arguments ####################
 
 class SimpleNN(BaseEstimator, TransformerMixin):

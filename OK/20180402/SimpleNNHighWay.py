@@ -3,33 +3,29 @@
 @author:
 BinCai (bincai@tencent.com)
 '''
-import os
-import sys
-import math
-import datetime
 import argparse
+import datetime
+import math
 from time import time
+
 import numpy as np
 import tensorflow as tf
+from LibSVMInputEmbAnsy import LoadLibSvmDataV2
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
+from sklearn.metrics import mean_squared_error
 from sklearn.metrics import roc_auc_score
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
-from tensorflow.contrib.tensorboard.plugins import projector
-from LibSVMInputEmbAnsy import LoadLibSvmDataV2
 
 
 #################### Arguments ####################
 
-class SimpleNNEmb(BaseEstimator, TransformerMixin):
+class SimpleNN(BaseEstimator, TransformerMixin):
   def __init__(self, args, dataset, layers, keep_prob, random_seed=0):
-    self.args = args
-
     now = datetime.datetime.now()
     self.timestamp = now.strftime("%Y%m%d%H%M%S")
 
+    self.args = args
     self.dim = dataset.dim
     self.dataset = dataset
 
@@ -61,13 +57,9 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
     elif args.activation == 'identity':
       self.activation_function = tf.identity
 
-    self.feature_embedding = args.feature_embedding
-    self.embedding_conf = dataset.embedding_conf
-    self.embedding_size = args.embedding_size
-    self.embedding_init_zero = args.embedding_init_zero
-
     self.model_path = args.modelpath
 
+    self.early_stop = args.early_stop
     self.verbose = args.verbose
 
     self.random_seed = random_seed
@@ -92,19 +84,11 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
         tf.set_random_seed(self.random_seed)
 
       self.lambda_pred_l2 = tf.constant(args.lambda_pred_l2, name='lambda_pred_l2')
-      self.lambda_emb_l2 = tf.constant(args.lambda_emb_l2, name='lambda_emb_l2')
       self.l2_norm_init = tf.constant(0.0, name='l2_init')
 
       # Input data.
       with tf.name_scope('input') as scope:
-        self.train_features = tf.placeholder(tf.float32, shape=[None, None],
-                                             name='train_features')  # None * features_M
-
-        self.input_emb = []
-        # [(0, (11, 'bizuin', 1, 10000, 406417, 416416, 5, 2252, 2256), 6), (1, (0, 'agebucket', 1, 10, 1, 10, 7, 1, 7), 8)]
-        for item in self.embedding_conf:
-          self.input_emb.append(tf.placeholder(tf.int32, [None], name='input_emb_' + item[1][1]))
-
+        self.train_features = tf.placeholder(tf.float32, shape=[None, None], name='train_features')  # None * features_M
         self.train_labels = tf.placeholder(tf.float32, shape=[None, 1], name='train_labels')  # None * 1
         self.dropout_keep = tf.placeholder(tf.float32, shape=[None], name='dropout_keep')
         self.nn_l2 = tf.placeholder(tf.float32, shape=[None], name='lambda_l2')
@@ -117,24 +101,8 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
       summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
       # Model.
       # ________ Deep Layers __________
-      # self.embedded_bizuin = tf.nn.embedding_lookup(self.weights['emb_0'], self.input_emb[0])
-      self.embedded_lookup = []
-
-      # concat all input
-      with tf.name_scope("emb_lookup"):
-        input_all = [self.train_features]
-        for idx, item in enumerate(self.embedding_conf):
-          embedded_lookup_item = tf.nn.embedding_lookup(self.weights['weight_emb_' + item[1][1]], self.input_emb[idx])
-          self.embedded_lookup.append(embedded_lookup_item)
-          input_all.append(embedded_lookup_item)
-        self.NN = tf.concat(input_all, axis=1)
-
-        self.l2_norm = self.l2_norm_init
-        for idx, item in enumerate(self.embedded_lookup):
-          itemloss = tf.multiply(self.lambda_emb_l2, tf.reduce_sum(tf.pow(self.embedded_lookup[idx], 2)))
-          summaries.append(tf.summary.scalar("emb_l2_" + str(idx), itemloss))
-          self.l2_norm += itemloss
-
+      self.NN = self.train_features
+      self.l2_norm = self.l2_norm_init
       for i in range(0, len(self.layers)):
         layername = 'layer_%d' % i
         biasname = 'bias_%d' % i
@@ -153,6 +121,7 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
           summaries.append(tf.summary.scalar("l2sum", self.l2_norm))
 
       with tf.name_scope('pred') as scope:
+        self.NN = tf.concat([self.NN, self.train_features], axis=1)
         self.NN = tf.matmul(self.NN, self.weights['prediction'])  # None * 1
         self.out = tf.add(self.NN, self.weights['bias'])
 
@@ -173,19 +142,21 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
 
       with tf.name_scope('opt') as scope:
         self.decay_learning_rate = tf.train.exponential_decay(self.learning_rate,
-          self.train_step, 100, 0.98, staircase=True)
+                                                              self.train_step, 100, 0.98, staircase=True)
 
         # Optimizer.
         if self.optimizer_type == 'AdamOptimizer':
           self.optimizer = tf.train.AdamOptimizer(learning_rate=self.decay_learning_rate, beta1=0.9, beta2=0.999,
-                                                  epsilon=1e-8) #.minimize(self.loss)
+                                                  epsilon=1e-8)  # .minimize(self.loss)
         elif self.optimizer_type == 'AdagradOptimizer':
           self.optimizer = tf.train.AdagradOptimizer(learning_rate=self.decay_learning_rate,
-                                                     initial_accumulator_value=1e-8) #.minimize(self.loss)
+                                                     initial_accumulator_value=1e-8)  # .minimize(self.loss)
         elif self.optimizer_type == 'GradientDescentOptimizer':
-          self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.decay_learning_rate) #.minimize(self.loss)
+          self.optimizer = tf.train.GradientDescentOptimizer(
+            learning_rate=self.decay_learning_rate)  # .minimize(self.loss)
         elif self.optimizer_type == 'MomentumOptimizer':
-          self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.decay_learning_rate, momentum=0.95) #.minimize(self.loss)
+          self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.decay_learning_rate,
+                                                      momentum=0.95)  # .minimize(self.loss)
 
         self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
         self.train_op = self.optimizer.apply_gradients(self.grads_and_vars, global_step=self.global_step)
@@ -203,7 +174,7 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
             summaries.append(reduce_min_summary)
 
         summaries.append(tf.summary.scalar("decay_learning_rate", self.decay_learning_rate))
-               
+
       with tf.name_scope('weight') as scope:
         for k in self.weights:
           v=self.weights[k]
@@ -215,7 +186,7 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
           summaries.append(reduce_max_summary)
           reduce_min_summary = tf.summary.scalar("{}/weight/min".format(k), tf.reduce_min(v))
           summaries.append(reduce_min_summary)
-          
+            
       self.summary_op = tf.summary.merge(summaries)
 
       # init
@@ -241,22 +212,10 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
 
     self.global_step = tf.Variable(0, name="global_step", trainable=False)
 
-    emb_dim = 0
-    with tf.name_scope('emb_lookup') as scope:
-      if self.feature_embedding:
-        for idx, item in enumerate(self.embedding_conf):
-          weight_name = 'weight_emb_' + item[1][1]
-          if self.embedding_init_zero:
-            all_weights[weight_name] = tf.Variable(tf.zeros([item[2], self.embedding_size], tf.float32), name=weight_name)
-          else:
-            all_weights[weight_name] = tf.Variable(tf.random_uniform([item[2], self.embedding_size], -1.0, 1.0),
-                                                   name=weight_name)
-          emb_dim += self.embedding_size
-
-    glorot = np.sqrt(2.0 / (self.dim + emb_dim + self.layers[0]))
-    all_weights['layer_0'] = tf.Variable(
-      np.random.normal(loc=0, scale=glorot, size=(self.dim + emb_dim, self.layers[0])), dtype=np.float32)
-    print('layer_0 [input: %d, layers[0]: %d]' % (self.dim + emb_dim, self.layers[0]))
+    glorot = np.sqrt(2.0 / (self.dim + self.layers[0]))
+    all_weights['layer_0'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(self.dim, self.layers[0])),
+                                         dtype=np.float32)
+    print('layer_0 [input: %d, layers[0]: %d]' % (self.dim, self.layers[0]))
 
     for i in range(1, num_layer):
       glorot = np.sqrt(2.0 / (self.layers[i - 1] + self.layers[i]))
@@ -276,10 +235,10 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
     all_weights['bias_0'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(1, self.layers[0])),
                                         dtype=np.float32)  # 1 * layers[0]
     print('bias_0 [1, layers[0]: %d]' % self.layers[0])
-    glorot = np.sqrt(2.0 / (self.layers[-1] + 1))
-    all_weights['prediction'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(self.layers[-1], 1)),
+    glorot = np.sqrt(2.0 / (self.layers[-1] + self.dim + 1))
+    all_weights['prediction'] = tf.Variable(np.random.normal(loc=0, scale=glorot, size=(self.layers[-1] + self.dim, 1)),
                                             dtype=np.float32)  # layers[-1] * 1
-    print('prediction [1, [layers[-1]: %d]' % self.layers[-1])
+    print('prediction [1, [layers[-1]: %d]' % (self.layers[-1] + self.dim))
     # prediction [1, [layers[-1]: 10]
     all_weights['bias'] = tf.Variable(tf.constant(0.0), name='bias')  # 1 * 1
 
@@ -302,15 +261,12 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
                  self.dropout_keep: self.keep_prob,
                  self.nn_l2: self.lambda_nn_l2,
                  self.train_phase: True,
-                 self.train_step: current_step }
-    for idx, item in enumerate(self.embedded_lookup):
-      feed_dict[self.input_emb[idx]] = [e[idx] for e in data['E']]
-
-    if step%10==0 and step>100:
+                 self.train_step: current_step}
+    if step % 10 == 0: # and step > 100:
       loss, opt, summary = self.sess.run((self.loss, self.train_op, self.summary_op), feed_dict=feed_dict)
       summary_writer.add_summary(summary, step)
     else:
-      loss, opt = self.sess.run((self.loss, self.train_op), feed_dict=feed_dict)      
+      loss, opt = self.sess.run((self.loss, self.train_op), feed_dict=feed_dict)
     return loss
 
   def train(self):  # fit a dataset
@@ -327,12 +283,6 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
 
     summary_writer = tf.summary.FileWriter(self.model_path, graph=self.sess.graph)
 
-    for item in self.embedding_conf:
-      config = projector.ProjectorConfig()
-      embedding_conf = config.embeddings.add()
-      embedding_conf.tensor_name = 'weight_emb_' + item[1][1]
-      projector.visualize_embeddings(summary_writer, config)
-
     t1 = time()
     for epoch in range(self.epoch):
       Train_data = self.dataset.read_traindata_batch_ansyc()
@@ -342,7 +292,7 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
         t2 = time()
         # output validation
         train_result, train_result_auc = self.evaluate(Train_data)
-        Validation_data = self.dataset.read_testdata_batch(self.batch_size)
+        Validation_data = self.dataset.read_testdata_batch_ansyc()
         valid_result, valid_result_auc = self.evaluate(Validation_data)
 
         # summary info
@@ -352,7 +302,6 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
           tf.Summary.Value(tag="test_loss", simple_value=valid_result),
           tf.Summary.Value(tag="test_auc", simple_value=valid_result_auc),
         ])
-
         summary_writer.add_summary(summary, epoch)
 
         self.train_rmse.append(train_result)
@@ -360,12 +309,9 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
         if self.verbose > 0 and epoch % self.verbose == 0:
           print("Epoch %d [%.1f s]\ttrain=%.4f auc=%.4f, valid=%.4f auc=%.4f, loss=%.4f [%.1f s]"
                 % (
-                  epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss,
-                  time() - t2))
+                epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
 
         t1 = time()
-
-    self.saver.save(self.sess, os.path.join(self.model_path, "model.ckpt" + self.timestamp))
 
     summary_writer.close()
     if self.dataset.has_predset():
@@ -373,17 +319,13 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
 
   def pred_data(self):
     ret = self.dataset.read_preddata_batch()
-    outfname = args.modelpath + '/' + args.predoutputfile
+    outfname = args.modelpath + '/' + args.predoutputfile + self.timestamp
 
     with open(outfname, 'w') as outf:
       while ret['D'] > 0:
         num_example = ret['D']
-        feed_dict = {self.train_features: ret['X'],
-                     self.dropout_keep: self.no_dropout,
-                     self.train_phase: False}
-        for idx, item in enumerate(self.embedded_lookup):
-          feed_dict[self.input_emb[idx]] = [e[idx] for e in ret['E']]
-
+        feed_dict = {self.train_features: ret['X'], self.train_labels: [[0] for y in ret['ID']],
+                     self.dropout_keep: self.no_dropout, self.train_phase: False}
         predictions = self.sess.run((self.out), feed_dict=feed_dict)
         for k, v in zip(ret['ID'], predictions):
           outf.write(str(k) + ' ' + str(v[0]) + '\n')
@@ -393,13 +335,8 @@ class SimpleNNEmb(BaseEstimator, TransformerMixin):
     num_example = len(data['Y'])
     if num_example == 0:
       return 0.0, 0.0
-    feed_dict = {self.train_features: data['X'],
-                 self.train_labels: [[y] for y in data['Y']],
-                 self.dropout_keep: self.no_dropout,
-                 self.train_phase: False}
-    for idx, item in enumerate(self.embedded_lookup):
-      feed_dict[self.input_emb[idx]] = [e[idx] for e in data['E']]
-
+    feed_dict = {self.train_features: data['X'], self.train_labels: [[y] for y in data['Y']],
+                 self.dropout_keep: self.no_dropout, self.train_phase: False}
     predictions = self.sess.run((self.out), feed_dict=feed_dict)
     y_pred = np.reshape(predictions, (num_example,))
     y_true = np.reshape(data['Y'], (num_example,))
@@ -442,19 +379,15 @@ def parse_args():
                       help='Remove Low Frequence Feature (include)')
   parser.add_argument('--remove_feature', nargs='*', default=[], required=False,
                       help='Remove Some Feature')
-  parser.add_argument('--feature_cross', type=str2bool, default=False,
-                      help='cross feature.')
   parser.add_argument('--feature_embedding', nargs='*', default=[], required=False,
                       help='embedding feature.')
-  parser.add_argument('--embedding_size', type=int, default=6,
-                      help='embedding feature size.')
-  parser.add_argument('--embedding_init_zero', type=str2bool, default=False,
-                      help='embedding feature init as zero.')
+  parser.add_argument('--feature_cross', type=str2bool, default=True,
+                      help='cross feature.')
   parser.add_argument('--dataset', nargs='+', default=['msg_20171031data.bincai', 'msg_20171101data.bincai'],
                       help='Choose a train dataset.')
   parser.add_argument('--testset', nargs='*', default=[],
                       help='Choose a test dataset.')
-  parser.add_argument('--predset', nargs='+', default=[],
+  parser.add_argument('--predset', nargs='?', default='',
                       help='Choose a pred dataset.')
   parser.add_argument('--predoutputfile', nargs='?', default='predresult',
                       help='Choose a pred dataset.')
@@ -482,12 +415,12 @@ def parse_args():
                       help='Whether to perform batch normaization (0 or 1)')
   parser.add_argument('--activation', nargs='?', default='relu',
                       help='Which activation function to use for deep layers: relu, sigmoid, tanh, identity')
+  parser.add_argument('--early_stop', type=int, default=1,
+                      help='Whether to perform early stop (0 or 1)')
   parser.add_argument('--lambda_nn_l2', nargs='?', default='[0.0,0.0001]',
                       help='Regulation parameter lambda for pred')
   parser.add_argument('--lambda_pred_l2', type=float, default=0.0001,
                       help='Regulation parameter lambda for NN')
-  parser.add_argument('--lambda_emb_l2', type=float, default=0.0001,
-                      help='Regulation parameter lambda for embedding layser')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
 
@@ -505,7 +438,7 @@ if __name__ == '__main__':
 
   # Training
   t1 = time()
-  model = SimpleNNEmb(args, dataset, eval(args.layers), eval(args.keep_prob))
+  model = SimpleNN(args, dataset, eval(args.layers), eval(args.keep_prob))
   model.train()
 
   dataset.stop_and_wait_ansyc()

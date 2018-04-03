@@ -14,22 +14,21 @@ Auc: 78.12%
 
 cd /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/code; python SimpleNN.py --dim 6309 --path /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/data/msg.org --dataset 20171031data.ridx#20171101data.ridx#20171102data.ridx --testset 20171103data.ridx --modelpath /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/data/model --layers [128,32] --keep_prob [0.8,0.5] --loss_type log_loss --activation relu --optimizer AdamOptimizer --lr 0.05 --batch_norm 1 --verbose 1 --early_stop 0 --epoch 200
 '''
-import os
-import sys
-import math
-import datetime
 import argparse
+import datetime
+import math
+import os
 from time import time
+
 import numpy as np
 import tensorflow as tf
+from LibSVMInputEmbAnsy import LoadLibSvmDataV2
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import accuracy_score
 from sklearn.metrics import log_loss
+from sklearn.metrics import mean_squared_error
 from sklearn.metrics import roc_auc_score
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 from tensorflow.contrib.tensorboard.plugins import projector
-from LibSVMInputEmbAnsy import LoadLibSvmDataV2
 
 
 #################### Arguments ####################
