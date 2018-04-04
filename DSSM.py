@@ -10,9 +10,7 @@ from keras.layers import Dot
 from keras.layers import Input
 from keras.models import Model
 from keras.callbacks import ModelCheckpoint
-
-import config
-from config import *
+import numpy as np
 
 param = {
   'inputpath'   : 'data/',
@@ -20,9 +18,11 @@ param = {
   'testset'     : ['sample.bincai.txt.num', 'sample.bincai2.txt.num'],
   'predset'     : '',
   'shuffle_file': True,
-  'batch_size'  : 1000,
+  'batch_size'  : 10,
   'dim'         : 1000,  # 12540
-  'vec_size'    : 128
+  'vec_size'    : 128,
+  'steps_per_epoch':100,
+  'epochs'      : 1000
 }
 
 #param = {
@@ -93,7 +93,9 @@ param = {
 #  'shuffle_file': True,
 #  'batch_size'  : 1000,
 #  'dim'         : 12540,
-#  'vec_size'    : 128
+#  'vec_size'    : 128,
+#  'steps_per_epoch':1000,
+#  'epochs'      : 1000
 #}
 
 def log2(x):
@@ -162,8 +164,8 @@ def get_lr(epoch):
 
 def create_dnn_model(text_length):
   ninput = Input(shape=(text_length,))
-  x = Dense(config.vec_size, activation='relu')(ninput)
-  y = Dense(config.vec_size, activation='tanh')(x)
+  x = Dense(param['vec_size'], activation='relu')(ninput)
+  y = Dense(param['vec_size'], activation='tanh')(x)
   model = Model(ninput, y, name='share_model_len%s' % (text_length))
   return model
 
@@ -206,19 +208,24 @@ def train3(vocab_size, dateset):
   parallel_model = model
   parallel_model.compile(optimizer=optimizers.Nadam(lr=0.002), loss=paper_loss, metrics=[accuracy, precision, recall, auc])
 
-  filepath=param['inputpath']+"weights-improvement-{epoch:02d}-{val_acc:.2f}.checkpoint"
-  checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+#  train_data = readdata.read_traindata_batch_ansyc()
+#  x_train = [ np.array(train_data['Q']), np.array(train_data['D']) ]
+#  y_train = (np.array(train_data['Y']).transpose())
+#  print('*'*20)
+#  print('len(x_train) %d x_train[0].shape %s x_train[1].shape %s y_train.shape %s' % (len(x_train), x_train[0].shape, x_train[1].shape, y_train.shape))
+
+  filepath=param['inputpath']+"weights-improvement-{epoch:02d}.h5py"
+  checkpoint = ModelCheckpoint(filepath, monitor='val_auc', verbose=1, save_best_only=True, mode='max')
   callbacks_list = [checkpoint]
 
   parallel_model.fit_generator(generator=train_data_generator(readdata),
-                               steps_per_epoch=1000,
+                               steps_per_epoch=param['steps_per_epoch'],
                                # Total number of steps (batches of samples) to yield from generator before declaring one epoch finished and starting the next epoch.
-                               epochs=1000,
+                               epochs=param['epochs'],
                                verbose=2,  # 日志显示，0为不在标准输出流输出日志信息，1为输出进度条记录，2为每个epoch输出一行记录
                                callbacks=callbacks_list,  # 其中的元素是keras.callbacks.Callback的对象。这个list中的回调函数将会在训练过程中的适当时机被调用
                                validation_data=validation_data_generator(readdata),
                                validation_steps=10)
-
 
 #  train_data = readdata.read_traindata_batch_ansyc()
 #  valid_data = readdata.read_testdata_batch(1024)
