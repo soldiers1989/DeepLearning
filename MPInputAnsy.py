@@ -41,7 +41,7 @@ class TxtFilesConcurrentRandomReaderV2(object):
     self.files = tmpfiles
     print(self.files)
 
-    self.epochs = args.get('epochs', 0)
+    self.epochs = args.get('inputepochs', 0)
     self.nowepochs = 0
 
     self.openfile = []
@@ -238,8 +238,7 @@ class MPInputAnsy(object):
     self.traindataqueue = Queue(maxsize=5)
     self.testdataqueue = Queue(maxsize=3)
     self.readlock = threading.Lock()
-    self.threads = []
-        
+    self.threads = []        
     self.verbose = 0
     
   def processing_doc(self, line):

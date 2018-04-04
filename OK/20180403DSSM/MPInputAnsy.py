@@ -41,7 +41,7 @@ class TxtFilesConcurrentRandomReaderV2(object):
     self.files = tmpfiles
     print(self.files)
 
-    self.epochs = args.get('epochs', 0)
+    self.epochs = args.get('inputepochs', 0)
     self.nowepochs = 0
 
     self.openfile = []
@@ -52,6 +52,7 @@ class TxtFilesConcurrentRandomReaderV2(object):
     self.nextfile = self._next_file()
     self.nextline = self._next_line()
     self.nextfile_batch = self._next_file_batch()
+    self.verbose = 0
 
   def __del__(self):
     self.closeopenfiles()
@@ -68,8 +69,8 @@ class TxtFilesConcurrentRandomReaderV2(object):
       fd = open(f[0], 'r')
       self.openfile.append((fd, f[2] * 1.0 / sumprob))
       self.readfileprobs.append(f[2] * 1.0 / sumprob)
-    print(self.openfile)
-    print(self.readfileprobs)
+    if self.verbose==2: print(self.openfile)
+    if self.verbose==2: print(self.readfileprobs)
 
   def closeopenfile(self, idx):
     self.openfile[idx][0].close()
@@ -152,6 +153,7 @@ class TxtFilesRandomReader(object):
     self.nextfile = self._get_nextfile()
     self.nextline = self._read_line()
     self.lines = []
+    self.verbose = 0
 
   def _get_nextfile(self):
     epoch, retidx = 0, 0
@@ -236,7 +238,8 @@ class MPInputAnsy(object):
     self.traindataqueue = Queue(maxsize=5)
     self.testdataqueue = Queue(maxsize=3)
     self.readlock = threading.Lock()
-    self.threads = []
+    self.threads = []        
+    self.verbose = 0
     
   def processing_doc(self, line):
     ret = np.zeros(self.dim, dtype=float)
@@ -284,7 +287,7 @@ class MPInputAnsy(object):
       now3 = datetime.datetime.now()
       logingfo = logingfo+' END PROC: '+now3.strftime("%Y-%m-%d %H:%M:%S")
       logingfo = logingfo+' DURA: '+str(now3-now2)+' SIZE: '+str(self.batch_size)
-      print(logingfo)
+      if self.verbose==2: print(logingfo)
     print('End thread for traindata.read_batch')
 
   def do_ansyc_testset(self):
@@ -305,7 +308,7 @@ class MPInputAnsy(object):
         now3 = datetime.datetime.now()
         logingfo = logingfo+' END PROC: '+now3.strftime("%Y-%m-%d %H:%M:%S")
         logingfo = logingfo+' DURA: '+str(now3-now2)+' SIZE: '+str(self.batch_size_test)
-      print(logingfo)
+      if self.verbose==2: print(logingfo)
     print('End thread for traindata.read_batch')
 
   def start_ansyc(self):
