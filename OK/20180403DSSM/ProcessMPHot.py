@@ -340,6 +340,26 @@ if __name__ == '__main__':
                             help='stat mapping file.')
   reindex_data.set_defaults(func=lambda args: StatData(args).createdata())
 
+  #raw data生成预测数据
+  reindex_rawdata = subparsers.add_parser('praw')
+  reindex_rawdata.add_argument('--inputpath', default='data/', required=False,
+                            help='Input data path.')
+  reindex_rawdata.add_argument('--dataset', nargs='+', default=['sample.bincai.txt', 'sample.bincai2.txt'],
+                            help='Choose data to process.')
+  reindex_rawdata.add_argument('--outputpath', default='data/', required=False,
+                            help='Output data path.')
+  reindex_rawdata.add_argument('--postfix', default='processed',
+                            help='Reindex postfix.')
+  reindex_rawdata.add_argument('--postfixnum', default='num',
+                            help='Reindex postfix.')
+  reindex_rawdata.add_argument('--statfile', default='statfile', required=False,
+                            help='stat mapping file.')
+  reindex_rawdata.add_argument('--vocalsize', type=int, default=100000, required=False,
+                            help='stat mapping file.')
+  reindex_rawdata.add_argument('--idffile', default='idffile', required=False,
+                            help='idf  file.')
+  reindex_rawdata.set_defaults(func=lambda args: StatData(args).praw())
+
   args = parser.parse_args()
 
   print('args: ' + str(args))

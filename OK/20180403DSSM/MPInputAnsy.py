@@ -26,7 +26,7 @@ class TxtFilesConcurrentRandomReaderV2(object):
     tmpfiles = []
     self.totalfilesize = 0
     filesizemin = 9223372036854775807
-    for f in args['dataset']:
+    for f in args.get('dataset',[]):
       fname = f
       if not os.path.isfile(fname):
         fname = self.inputpath + '/' + f
@@ -190,9 +190,14 @@ class TxtFilesRandomReader(object):
   def _read_line(self):
     while True:
       fname = self.get_nextfile()
-      with open(fname, 'r') as f:
-        for row in f:
-          yield row.strip()
+      if Py3:
+        with open(fname, 'r', encoding='utf-8') as f:
+          for row in f:
+            yield row.strip()
+      else:
+        with open(fname, 'r') as f:
+          for row in f:
+            yield row.strip()
 
   def read_line(self):
     return next(self.nextline)
@@ -216,21 +221,42 @@ class MPInputAnsy(object):
     self.dim =  inputargs['dim']
     self.inputpath = inputargs['inputpath']
 
-    self.dataset = [self.inputpath + item for item in inputargs['dataset']]
-    print('self.dataset %s' % self.dataset)
-    self.testset = [self.inputpath + item for item in inputargs['testset']]
-    print('self.testset %s' % self.testset)
-    self.predset = [self.inputpath + item for item in inputargs['predset']]
-    print('self.predset %s' % self.predset)
+    self.dataset = []
+    self.testset = []
+    self.predset = []
 
-    self.batch_size = inputargs['batch_size']
-    if 'batch_size_test' in inputargs:
-      self.batch_size_test = inputargs['batch_size_test']
+    if Py3:
+      if 'dataset' in inputargs:
+        self.dataset = [self.inputpath + item for item in inputargs['dataset']]
+        print('self.dataset %s' % self.dataset)
+      if 'testset' in inputargs:
+        self.testset = [self.inputpath + item for item in inputargs['testset']]
+        print('self.testset %s' % self.testset)
+      if 'predset' in inputargs:
+        self.predset = [self.inputpath + item for item in inputargs['predset']]
+        print('self.predset %s' % self.predset)
+        
+        
+        
     else:
-      self.batch_size_test = self.batch_size * 2
+      if inputargs.has_key('dataset'):
+        self.dataset = [self.inputpath + item for item in inputargs['dataset']]
+        print('self.dataset %s' % self.dataset)
+      if inputargs.has_key('testset'):
+        self.testset = [self.inputpath + item for item in inputargs['testset']]
+        print('self.testset %s' % self.testset)
+      if inputargs.has_key('predset'):
+        self.predset = [self.inputpath + item for item in inputargs['predset']]
+        print('self.predset %s' % self.predset)
+
+    self.batch_size = inputargs.get('batch_size', 0)
+    self.batch_size_test = inputargs.get('batch_size', self.batch_size * 2)
+    
 
     self.traindata = TxtFilesConcurrentRandomReaderV2(inputargs)
-    self.testdata = TxtFilesRandomReader(files=self.testset, shuffleFile=inputargs['shuffle_file'])
+    
+    self.testdata = TxtFilesRandomReader(files=self.testset, shuffleFile=inputargs.get('shuffle_file', False) )
+    
     self.preddata = TxtFilesRandomReader(files=self.predset, shuffleFile=False, shuffleRecord=False,
                                          epochs=1)
 
@@ -345,18 +371,16 @@ class MPInputAnsy(object):
     return self.testdataqueue.get()
 
   def read_preddata_batch(self, size=256):
-    labels = []
+    ids = []
     features = []
-    emb = []
     lines = self.preddata.read_batch(size)
     for line in lines:
-      fields = line.strip().split()
-      f, fe = self.processing_feature(fields)
-      features.append(f)
-      emb.append(fe)
-      labels.append(fields[0])
+      fields = line.strip().split('#')
+      if len(fields) != 3: continue
+      features.append(self.processing_doc(fields[2]))
+      ids.append(fields[0])
 
-    return {'X': features, 'E': emb, 'ID': labels, 'D': len(lines)}
+    return {'X': features, 'ID': ids, 'L': len(features)}
 
   def has_predset(self):
     return len(self.predset) > 0
@@ -391,7 +415,7 @@ if __name__ == '__main__':
                       help='Choose a train dataset.')
   parser.add_argument('--testset', nargs='*', default=[],
                       help='Choose a test dataset.')
-  parser.add_argument('--predset', nargs='?', default='',
+  parser.add_argument('--predset', nargs='*', default=['praw.txt.num', 'praw2.txt.num'],
                       help='Choose a pred dataset.')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
@@ -404,11 +428,19 @@ if __name__ == '__main__':
   print(vars(args))
   readdata = MPInputAnsy(vars(args))
   
-  readdata.start_ansyc()
-  train_data = readdata.read_traindata_batch_ansyc()  
-  print(train_data)
-  train_data = readdata.read_traindata_batch_ansyc()  
-  print(train_data)
-  readdata.stop_and_wait_ansyc()
+  ret = readdata.read_preddata_batch(size=3)
+  while ret['L']>0:
+    print(ret['L'])
+    ret = readdata.read_preddata_batch(size=3)
+#  print('*'*20)
+#  ret = readdata.read_preddata_batch(size=3)
+#  print(ret)
+  
+#  readdata.start_ansyc()
+#  train_data = readdata.read_traindata_batch_ansyc()  
+#  print(train_data)
+#  train_data = readdata.read_traindata_batch_ansyc()  
+#  print(train_data)
+#  readdata.stop_and_wait_ansyc()
 
 

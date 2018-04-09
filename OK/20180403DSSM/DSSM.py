@@ -143,20 +143,17 @@ def recall(y_true, y_pred):
   r = c1 / (c3 + K.epsilon())
   return r
 
-
 def binary_PFA(y_true, y_pred, threshold=K.variable(value=0.5)):
   y_pred = K.cast(y_pred >= threshold, 'float32')
   N = K.sum(1 - y_true)
   FP = K.sum(y_pred - y_pred * y_true)
   return FP / (N + K.epsilon())
 
-
 def binary_PTA(y_true, y_pred, threshold=K.variable(value=0.5)):
   y_pred = K.cast(y_pred >= threshold, 'float32')
   P = K.sum(y_true)
   TP = K.sum(y_pred * y_true)
   return TP / (P + K.epsilon())
-
 
 def auc(y_true, y_pred):
   ptas = tf.stack([binary_PTA(y_true, y_pred, k) for k in np.linspace(0, 1, 1000)], axis=0)
@@ -166,7 +163,6 @@ def auc(y_true, y_pred):
   s = ptas * binSizes
   return K.sum(s, axis=0)
 
-
 def get_lr(epoch):
   if epoch < 10:
     return 0.0015
@@ -175,14 +171,12 @@ def get_lr(epoch):
   else:
     return 0.0005
 
-
-def create_dnn_model(text_length):
-  ninput = Input(shape=(text_length,))
+def create_dnn_model(vocab_size):
+  ninput = Input(shape=(vocab_size,))
   x = Dense(param['vec_size'], activation='relu')(ninput)
   y = Dense(param['vec_size'], activation='tanh')(x)
-  model = Model(ninput, y, name='share_model_len%s' % (text_length))
+  model = Model(ninput, y, name='share_model_len%s' % (vocab_size))
   return model
-
 
 def model_framework_bincai(vocab_size):
   content_model = create_dnn_model(vocab_size)
@@ -215,7 +209,6 @@ def validation_data_generator(dateset):
     x_valid, y_valid = [np.array(valid_data['Q']), np.array(valid_data['D'])], np.array(valid_data['Y']).transpose()
     #print('len(x_valid) %d x_valid[0].shape %s x_valid[1].shape %s y_valid.shape %s' % (len(x_valid), x_valid[0].shape, x_valid[1].shape, y_valid.shape))
     yield x_valid, y_valid
-
 
 def train3(vocab_size, dateset):
   lr = LearningRateScheduler(get_lr)
