@@ -11,9 +11,28 @@ from keras.models import load_model
 import numpy as np
 
 param = {
-  'model' : 'D:\DeepLearning\data\weights-improvement-01.h5py',
-  'vocab' : ''
+  'inputpath' : 'data/',
+  'model'     : 'D:\\DeepLearning\\data\\20180408180702title_model.h5py',
+  'predset'   : ['praw.txt.num', 'praw2.txt.num'],
+  'dim'       : 1000,
+  'output'    : 'baidu.pred'
 }
+
+#param = {
+#  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/pred',
+#  'model'  : 'D:\DeepLearning\data\weights-improvement-01.h5py',
+#  'predset': ['attempt_1511854667364_159455498_m_000000_0.1523158451311.num',
+#              'attempt_1511854667364_159455498_m_000004_0.1523158441291.num',
+#              'attempt_1511854667364_159455498_m_000001_0.1523158447956.num',
+#              'attempt_1511854667364_159455498_m_000005_0.1523158448614.num',
+#              'attempt_1511854667364_159455498_m_000002_0.1523158440347.num',
+#              'attempt_1511854667364_159455498_m_000006_0.1523158448470.num',
+#              'attempt_1511854667364_159455498_m_000003_0.1523158444233.num',
+#              'baidutopic.num' ]
+#  'dim'    : 12540,
+#  'output' : 'baidu.pred'
+#}
+
 
 def log2(x):
   numerator = tf.log(x)
@@ -104,80 +123,108 @@ def model_framework_bincai(vocab_size):
   return model, content_model, content_model
 
 if __name__ == '__main__':
-#  readdata = MPInputAnsy(param)
-#  readdata.start_ansyc()
-#
-#  train3(param['dim'], dateset=readdata)
+  print('*'*20)
   base_model = load_model(param['model'], custom_objects={'paper_loss': paper_loss,
-  	  	'paper_loss': paper_loss,
-  	  	'log2': log2,
-  	  	'euclidean': euclidean,
-  	  	'cos': cos,
-  	  	'accuracy': accuracy,
-  	  	'precision': precision,
-  	  	'recall': recall,	  
-  	  	'binary_PFA': binary_PFA,	  
-  	  	'binary_PTA': binary_PTA,	  
-  	  	'auc': auc })
-  model = Model(inputs=base_model.input, outputs=base_model.get_layer('share_model_len1000').get_output_at(1) )
-  	  		
+        'paper_loss': paper_loss,
+        'log2': log2,
+        'euclidean': euclidean,
+        'cos': cos,
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'binary_PFA': binary_PFA,
+        'binary_PTA': binary_PTA,
+        'auc': auc }) 
+  
+  base_model.summary()
+  
+  outfname = param['inputpath'] + '/' + param['output']
+  print('open %s for write' % outfname)
+  with open(outfname, 'w') as outf:
+    readdata = MPInputAnsy(param)
+    pred_data = readdata.read_preddata_batch()
+    while pred_data['L']>0:
+      print('pred_data[L] is %d'%pred_data['L'])
+      vectors = base_model.predict(np.array(pred_data['X']))
+      for item in zip(pred_data['ID'], vectors):
+        outf.write(item[0])
+        outf.write('\t')
+        outf.write('#'.join([str(one) for one in item[1]]))
+        outf.write('\n')
+      pred_data = readdata.read_preddata_batch()  
+  
+#  base_model = load_model(param['model'], custom_objects={'paper_loss': paper_loss,
+#       'paper_loss': paper_loss,
+#       'log2': log2,
+#       'euclidean': euclidean,
+#       'cos': cos,
+#       'accuracy': accuracy,
+#       'precision': precision,
+#       'recall': recall,
+#       'binary_PFA': binary_PFA,
+#       'binary_PTA': binary_PTA,
+#       'auc': auc })
+#
+#  model1 = Model(inputs=base_model.input, outputs=base_model.get_layer('share_model_len1000').get_output_at(1) )
+#  model0 = Model(inputs=base_model.input, outputs=base_model.get_layer('share_model_len1000').get_output_at(0) )
+
 #_________________________________________________________________
-#Layer (type)                 Output Shape              Param #   
+#Layer (type)                 Output Shape              Param #
 #=================================================================
-#input_1 (InputLayer)         (None, 12540)             0         
+#input_1 (InputLayer)         (None, 12540)             0
 #_________________________________________________________________
-#dense_1 (Dense)              (None, 128)               1605248   
+#dense_1 (Dense)              (None, 128)               1605248
 #_________________________________________________________________
-#dense_2 (Dense)              (None, 128)               16512     
+#dense_2 (Dense)              (None, 128)               16512
 #=================================================================
 #Total params: 1,621,760
 #Trainable params: 1,621,760
 #Non-trainable params: 0
 #_________________________________________________________________
 #____________________________________________________________________________________________________
-#Layer (type)                     Output Shape          Param #     Connected to                     
+#Layer (type)                     Output Shape          Param #     Connected to
 #====================================================================================================
-#article1_input (InputLayer)      (None, 12540)         0                                            
+#article1_input (InputLayer)      (None, 12540)         0
 #____________________________________________________________________________________________________
-#article2_input (InputLayer)      (None, 12540)         0                                            
+#article2_input (InputLayer)      (None, 12540)         0
 #____________________________________________________________________________________________________
-#share_model_len12540 (Model)     (None, 128)           1621760     article1_input[0][0]             
-#                                                                   article2_input[0][0]             
+#share_model_len12540 (Model)     (None, 128)           1621760     article1_input[0][0]
+#                                                                   article2_input[0][0]
 #____________________________________________________________________________________________________
-#dot_1 (Dot)                      (None, 1)             0           share_model_len12540[1][0]       
-#                                                                   share_model_len12540[2][0]       
+#dot_1 (Dot)                      (None, 1)             0           share_model_len12540[1][0]
+#                                                                   share_model_len12540[2][0]
 #====================================================================================================
 #Total params: 1,621,760
 #Trainable params: 1,621,760
 #Non-trainable params: 0
 
 #_________________________________________________________________
-#Layer (type)                 Output Shape              Param #   
+#Layer (type)                 Output Shape              Param #
 #=================================================================
-#input_1 (InputLayer)         (None, 1000)              0         
+#input_1 (InputLayer)         (None, 1000)              0
 #_________________________________________________________________
-#dense_1 (Dense)              (None, 128)               128128    
+#dense_1 (Dense)              (None, 128)               128128
 #_________________________________________________________________
-#dense_2 (Dense)              (None, 128)               16512     
+#dense_2 (Dense)              (None, 128)               16512
 #=================================================================
 #Total params: 144,640
 #Trainable params: 144,640
 #Non-trainable params: 0
 #_________________________________________________________________
 #__________________________________________________________________________________________________
-#Layer (type)                    Output Shape         Param #     Connected to                     
+#Layer (type)                    Output Shape         Param #     Connected to
 #==================================================================================================
-#article1_input (InputLayer)     (None, 1000)         0                                            
+#article1_input (InputLayer)     (None, 1000)         0
 #__________________________________________________________________________________________________
-#article2_input (InputLayer)     (None, 1000)         0                                            
+#article2_input (InputLayer)     (None, 1000)         0
 #__________________________________________________________________________________________________
-#share_model_len1000 (Model)     (None, 128)          144640      article1_input[0][0]             
-#                                                                 article2_input[0][0]             
+#share_model_len1000 (Model)     (None, 128)          144640      article1_input[0][0]
+#                                                                 article2_input[0][0]
 #__________________________________________________________________________________________________
-#dot_1 (Dot)                     (None, 1)            0           share_model_len1000[1][0]        
-#                                                                 share_model_len1000[2][0]        
+#dot_1 (Dot)                     (None, 1)            0           share_model_len1000[1][0]
+#                                                                 share_model_len1000[2][0]
 #==================================================================================================
 #Total params: 144,640
 #Trainable params: 144,640
 #Non-trainable params: 0
-	
+

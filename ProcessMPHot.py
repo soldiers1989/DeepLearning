@@ -57,9 +57,9 @@ class TxtFileReader(object):
 class StatData(object):
   def __init__(self, inputargs):
     self.args = inputargs
-    self.inputpath = args.inputpath  # 输入目录
-    self.outputpath = args.outputpath  # 输出目录
-    self.dataset = args.dataset  # 待处理文件列表
+    self.inputpath = inputargs.inputpath  # 输入目录
+    self.outputpath = inputargs.outputpath  # 输出目录
+    self.dataset = inputargs.dataset  # 待处理文件列表
 
     self.idmaplock = threading.Lock()
 
@@ -139,11 +139,11 @@ class StatData(object):
         print("item[%s]=[%d]" % (item, self.idstat[item]))
 
   def saveidmap(self):
-    tosave = {"idstat": self.idstat,  # map
-              "cidmap": self.cidmap,  # cidmap
-              "idmap": self.idmap,  # idmap
-              "cmap": self.cmap,  # cmap
-              "maxidx": self.maxidx}  # maxidx
+    tosave = { "idstat": self.idstat,  # map
+               "cidmap": self.cidmap,  # cidmap
+               "idmap": self.idmap,    # idmap
+               "cmap": self.cmap,      # cmap
+               "maxidx": self.maxidx } # maxidx
 
     print('save ' + self.statfile + ', maxidx: ' + str(self.maxidx))
     pickle.dump(tosave, open(self.statfile, 'wb'))
@@ -263,6 +263,48 @@ class StatData(object):
 
         rline, data = self.readdatafilebatch(tfr)
 
+
+  def createdatafile2(self, fname):
+    outfname = self.outputpath + '/' + fname + '.' + self.args.postfix
+    outfnamenum = self.outputpath + '/' + fname + '.' + self.args.postfixnum
+    fname = self.inputpath + '/' + fname
+    tfr = TxtFileReader(fname)
+    with open(outfname, 'w') as outf, open(outfnamenum, 'w') as outnumf:
+      rline, data = self.readdatafilebatch(tfr)
+      while rline > 0:
+        for item in data:
+          item0 = set([self.cmap.get(k, 0) for k in item[0].decode('utf-8')])
+          item0.add(0)
+          item0.remove(0)
+          if (len(item0) < 10): continue
+          item0 = ' '.join([str(k) for k in item0])
+
+          item1 = set([self.cmap.get(k, 0) for k in item[1].decode('utf-8')])
+          item1.add(0)
+          item1.remove(0)
+          if (len(item1) < 10): continue
+          item1 = ' '.join([str(k) for k in item1])
+
+          item3 = set([self.cmap.get(k, 0) for k in item[2].decode('utf-8')])
+          item3.add(0)
+          item3.remove(0)
+          if (len(item3) < 10): continue
+          item3 = ' '.join([str(k) for k in item3])
+
+          outnumf.write(','.join((item0, item1, '1')))
+          outnumf.write('\n')
+          outnumf.write(','.join((item0, item3, '0')))
+          outnumf.write('\n')
+
+          #######################
+
+          outf.write(','.join((item[0], item[1], '1')))
+          outf.write('\n')
+          outf.write(','.join((item[0], item[3], '0')))  # 没有用2
+          outf.write('\n')
+
+        rline, data = self.readdatafilebatch(tfr)
+
   def createdata(self):
     if not os.path.exists(self.inputpath):
       print('Input dir "' + self.inputpath + '" NOT EXISTED')
@@ -282,7 +324,10 @@ class StatData(object):
         continue
 
       print("processing:" + fname)  # self.statfile(fname)
-      t = threading.Thread(target=self.createdatafile, args=(f,))
+      if self.args.version==1:
+        t = threading.Thread(target=self.createdatafile, args=(f,))
+      else:
+        t = threading.Thread(target=self.createdatafile2, args=(f,))
       threads.append(t)
       t.start()
 
@@ -306,7 +351,8 @@ if __name__ == '__main__':
     sys.setdefaultencoding("utf-8")
 
   cmdinfo = '\n  statdata: stat files'
-  cmdinfo += '\n  createdata: create traain data'
+  cmdinfo += '\n  createdata: create train data'
+  cmdinfo += '\n  praw: create predict data'
   parser = argparse.ArgumentParser(usage='%(prog)s [options]' + cmdinfo)
   subparsers = parser.add_subparsers()
 
@@ -335,10 +381,32 @@ if __name__ == '__main__':
   reindex_data.add_argument('--postfixnum', default='num',
                             help='Reindex postfix.')
   reindex_data.add_argument('--statfile', default='statfile', required=False,
-                            help='stat mapping file.')
+                            help='stat mapping file.')                            
+  reindex_data.add_argument('--version', type=int, default=2, required=False,
+                            help='1: random neg 2: low tfidf.')
   reindex_data.add_argument('--vocalsize', type=int, default=100000, required=False,
                             help='stat mapping file.')
   reindex_data.set_defaults(func=lambda args: StatData(args).createdata())
+
+  #raw data生成预测数据
+  reindex_rawdata = subparsers.add_parser('praw')
+  reindex_rawdata.add_argument('--inputpath', default='data/', required=False,
+                            help='Input data path.')
+  reindex_rawdata.add_argument('--dataset', nargs='+', default=['sample.bincai.txt', 'sample.bincai2.txt'],
+                            help='Choose data to process.')
+  reindex_rawdata.add_argument('--outputpath', default='data/', required=False,
+                            help='Output data path.')
+  reindex_rawdata.add_argument('--postfix', default='processed',
+                            help='Reindex postfix.')
+  reindex_rawdata.add_argument('--postfixnum', default='num',
+                            help='Reindex postfix.')
+  reindex_rawdata.add_argument('--statfile', default='statfile', required=False,
+                            help='stat mapping file.')
+  reindex_rawdata.add_argument('--vocalsize', type=int, default=100000, required=False,
+                            help='stat mapping file.')
+  reindex_rawdata.add_argument('--idffile', default='idffile', required=False,
+                            help='idf  file.')
+  reindex_rawdata.set_defaults(func=lambda args: StatData(args).praw())
 
   args = parser.parse_args()
 
