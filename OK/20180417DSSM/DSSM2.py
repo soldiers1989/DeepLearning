@@ -2,7 +2,7 @@
 
 import keras.backend as K
 import tensorflow as tf
-from MPInputAnsy import MPInputAnsy
+from MPInputAnsyVedio import MPInputAnsy
 from keras import losses
 from keras import optimizers
 from keras import regularizers
@@ -38,7 +38,7 @@ param = {
 }
 
 param = {
-  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/20180328/',
+  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/20180328.2/',
   'dataset': ['attempt_1511854667364_149204488_m_000029_0.1522330995773.num',
               'attempt_1511854667364_149204488_m_000000_0.1522330997662.num',
               'attempt_1511854667364_149204488_m_000030_0.1522330998076.num',

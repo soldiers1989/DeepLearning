@@ -3,7 +3,7 @@
 import sys
 import numpy as np
 import math
-from MPInputAnsy import TxtFilesRandomReader
+from MPInputAnsyVedio import TxtFilesRandomReader
 
 Py3 = sys.version_info[0] == 3
 if Py3:

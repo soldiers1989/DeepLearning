@@ -2,7 +2,7 @@
 
 import keras.backend as K
 import tensorflow as tf
-from MPInputAnsy import MPInputAnsy
+from MPInputAnsyVedio import MPInputAnsy
 from keras import optimizers
 from keras.callbacks import LearningRateScheduler
 from keras.layers import Dense
@@ -21,7 +21,8 @@ param = {
   'predset': '',
   'shuffle_file': True,
   'batch_size': 10,
-  'dim': 1000,  # 12540
+  'dimquery': 1000,  # 12540
+  'dimdoc':   1000,  # 12540
   'vec_size': 128,
   'steps_per_epoch': 10,
   'epochs': 1

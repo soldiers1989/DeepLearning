@@ -2,7 +2,7 @@
 
 import keras.backend as K
 import tensorflow as tf
-from MPInputAnsy import MPInputAnsy
+from MPInputAnsyVedio import MPInputAnsy
 from keras.layers import Dense
 from keras.layers import Dot
 from keras.layers import Input

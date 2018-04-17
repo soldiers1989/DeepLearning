@@ -2,7 +2,7 @@
 
 import keras.backend as K
 import tensorflow as tf
-from MPInputAnsy import MPInputAnsy
+from MPInputAnsyVedio import MPInputAnsy
 from keras.layers import Dense
 from keras.layers import Dot
 from keras.layers import Input
@@ -18,21 +18,27 @@ param = {
   'output'    : 'baidu.pred'
 }
 
-#param = {
-#  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/pred',
-#  'model'  : 'D:\DeepLearning\data\weights-improvement-01.h5py',
-#  'predset': ['attempt_1511854667364_159455498_m_000000_0.1523158451311.num',
-#              'attempt_1511854667364_159455498_m_000004_0.1523158441291.num',
-#              'attempt_1511854667364_159455498_m_000001_0.1523158447956.num',
-#              'attempt_1511854667364_159455498_m_000005_0.1523158448614.num',
-#              'attempt_1511854667364_159455498_m_000002_0.1523158440347.num',
-#              'attempt_1511854667364_159455498_m_000006_0.1523158448470.num',
-#              'attempt_1511854667364_159455498_m_000003_0.1523158444233.num',
-#              'baidutopic.num' ]
-#  'dim'    : 12540,
-#  'output' : 'baidu.pred'
-#}
+param = {
+  'inputpath' : '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/pred/',
+  'model'     : '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/pred/content.model.20180411061403.h5py',
+  'predset'   : ['attempt_1511854667364_159455498_m_000000_0.1523158451311.num',
+                 'attempt_1511854667364_159455498_m_000004_0.1523158441291.num',
+                 'attempt_1511854667364_159455498_m_000001_0.1523158447956.num',
+                 'attempt_1511854667364_159455498_m_000005_0.1523158448614.num',
+                 'attempt_1511854667364_159455498_m_000002_0.1523158440347.num',
+                 'attempt_1511854667364_159455498_m_000006_0.1523158448470.num',
+                 'attempt_1511854667364_159455498_m_000003_0.1523158444233.num' ],
+  'dim'       : 12540,
+  'output'    : 'mp.pred'
+}
 
+param = {
+  'inputpath' : '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/pred/',
+  'model'     : '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/hot_mp/src/data3/pred/content.model.20180411061403.h5py',
+  'predset'   : [ 'baidutopic.num' ],
+  'dim'       : 12540,
+  'output'    : 'baidu.pred'
+}
 
 def log2(x):
   numerator = tf.log(x)
@@ -123,7 +129,6 @@ def model_framework_bincai(vocab_size):
   return model, content_model, content_model
 
 if __name__ == '__main__':
-  print('*'*20)
   base_model = load_model(param['model'], custom_objects={'paper_loss': paper_loss,
         'paper_loss': paper_loss,
         'log2': log2,
@@ -144,7 +149,6 @@ if __name__ == '__main__':
     readdata = MPInputAnsy(param)
     pred_data = readdata.read_preddata_batch()
     while pred_data['L']>0:
-      print('pred_data[L] is %d'%pred_data['L'])
       vectors = base_model.predict(np.array(pred_data['X']))
       for item in zip(pred_data['ID'], vectors):
         outf.write(item[0])
