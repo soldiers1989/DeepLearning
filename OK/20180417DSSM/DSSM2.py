@@ -2,7 +2,7 @@
 
 import keras.backend as K
 import tensorflow as tf
-from MPInputAnsyVedio import MPInputAnsy
+from MPInputAnsyVedio import MPInputAnsyVedio
 from keras import losses
 from keras import optimizers
 from keras import regularizers
@@ -274,7 +274,7 @@ def train(dateset):
 
 if __name__ == '__main__':
   param['dim']=param['vocab_size']
-  readdata = MPInputAnsy(param)
+  readdata = MPInputAnsyVedio(param)
   readdata.start_ansyc()
 
   train(readdata)

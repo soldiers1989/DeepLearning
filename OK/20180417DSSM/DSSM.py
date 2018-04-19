@@ -2,7 +2,7 @@
 
 import keras.backend as K
 import tensorflow as tf
-from MPInputAnsyVedio import MPInputAnsy
+from MPInputAnsyVedio import MPInputAnsyVedio
 from keras import optimizers
 from keras.callbacks import LearningRateScheduler
 from keras.layers import Dense
@@ -262,7 +262,7 @@ def train3(vocab_size, dateset):
 #                     validation_data=[x_valid, y_valid], shuffle=True)
 
 if __name__ == '__main__':
-  readdata = MPInputAnsy(param)
+  readdata = MPInputAnsyVedio(param)
   readdata.start_ansyc()
 
   train3(param['dim'], dateset=readdata)

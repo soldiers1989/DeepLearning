@@ -2,7 +2,7 @@
 
 import keras.backend as K
 import tensorflow as tf
-from MPInputAnsyVedio import MPInputAnsy
+from MPInputAnsyVedio import MPInputAnsyVedio
 from keras.layers import Dense
 from keras.layers import Dot
 from keras.layers import Input
@@ -146,7 +146,7 @@ if __name__ == '__main__':
   outfname = param['inputpath'] + '/' + param['output']
   print('open %s for write' % outfname)
   with open(outfname, 'w') as outf:
-    readdata = MPInputAnsy(param)
+    readdata = MPInputAnsyVedio(param)
     pred_data = readdata.read_preddata_batch()
     while pred_data['L']>0:
       vectors = base_model.predict(np.array(pred_data['X']))
