@@ -196,6 +196,25 @@ class StatData(object):
     rline = 0
     ret = []
     for line in tfr.read_batch():
+    	#0
+    	#20180413
+    	#2636903641
+    	#13030936711307172552
+    	#r0560yseg1d
+    	#1
+    	#26
+    	#3
+    	#3209
+    	#1
+    	#4
+    	#1494446
+    	#1494483
+    	#象棋教学;象棋;棋牌;残局
+    	#2
+    	#0:3;1:3;22:1;29:1;31:2;3:3;43:5;4:1;6:7
+    	#1494446:1;1494447:2;1494449:5;1494452:5;1494460:1;1494461:7;1494462:1;1494463:3;1494468:1#1494423:3;1494437:2;1494439:3;1494483:1;1494519:5;1494520:1;1494546:1;1494553:1;1494570:1;1494576:1;1494578:1;1494589:5;1543614:1
+    	#2333:1;MMORPG:5;mad:1;不忠:1;全智贤:1;冯提莫:1;海贼王:5;几分钟看电影:3;出轨:1;王者荣耀:1;刀剑血拼:1;奇幻:2;刀工:1;剧情:1;功夫格斗:1;跑车:1;动作冒险:2;大话西游2:3;新大话西游2:2;爆笑婚礼:1;夫妻:1;奇趣:2;夺宝联盟:1;女主播:1;热舞:1;妮可·罗宾:1;威航:1;少年:3;布加迪:1;性感:1;性感美女:1;恶搞网管:1;我伙呆:3;搞笑:2;每天一部好电影:1;托尼·贾:1;抢劫偷盗:1;美国:1;抽奖:1;拳霸2:1;拳霸:1;撩妹:1;整蛊:1;日漫:3;棋牌:1;豪车展示:1;武则天:1;残局:1;民间高手:1;泰国:1;海草舞:2;醉酒:1;涨姿势:1;游戏杂谈:1;游戏试玩:1;熟人整蛊:1;爱情:1;爱情鸡汤:1;牛人:1;狗血爱情:1;糗事:2;超能力者:1;索隆:1;经典动画:2;绝活:1;网红:1;韩国:1;节目解说:5;萨博:1;虚荣:1;象棋:1;象棋教学:1;路飞:1;跳舞:1;身材火辣:1;阿七解说:1
+
       fields = line.split('#')
       if len(fields) != 3: continue
 
@@ -263,48 +282,6 @@ class StatData(object):
 
         rline, data = self.readdatafilebatch(tfr)
 
-
-  def createdatafile2(self, fname):
-    outfname = self.outputpath + '/' + fname + '.' + self.args.postfix
-    outfnamenum = self.outputpath + '/' + fname + '.' + self.args.postfixnum
-    fname = self.inputpath + '/' + fname
-    tfr = TxtFileReader(fname)
-    with open(outfname, 'w') as outf, open(outfnamenum, 'w') as outnumf:
-      rline, data = self.readdatafilebatch(tfr)
-      while rline > 0:
-        for item in data:
-          item0 = set([self.cmap.get(k, 0) for k in item[0].decode('utf-8')])
-          item0.add(0)
-          item0.remove(0)
-          if (len(item0) < 10): continue
-          item0 = ' '.join([str(k) for k in item0])
-
-          item1 = set([self.cmap.get(k, 0) for k in item[1].decode('utf-8')])
-          item1.add(0)
-          item1.remove(0)
-          if (len(item1) < 10): continue
-          item1 = ' '.join([str(k) for k in item1])
-
-          item3 = set([self.cmap.get(k, 0) for k in item[2].decode('utf-8')])
-          item3.add(0)
-          item3.remove(0)
-          if (len(item3) < 10): continue
-          item3 = ' '.join([str(k) for k in item3])
-
-          outnumf.write(','.join((item0, item1, '1')))
-          outnumf.write('\n')
-          outnumf.write(','.join((item0, item3, '0')))
-          outnumf.write('\n')
-
-          #######################
-
-          outf.write(','.join((item[0], item[1], '1')))
-          outf.write('\n')
-          outf.write(','.join((item[0], item[3], '0')))  # 没有用2
-          outf.write('\n')
-
-        rline, data = self.readdatafilebatch(tfr)
-
   def createdata(self):
     if not os.path.exists(self.inputpath):
       print('Input dir "' + self.inputpath + '" NOT EXISTED')
@@ -324,10 +301,7 @@ class StatData(object):
         continue
 
       print("processing:" + fname)  # self.statfile(fname)
-      if self.args.version==1:
-        t = threading.Thread(target=self.createdatafile, args=(f,))
-      else:
-        t = threading.Thread(target=self.createdatafile2, args=(f,))
+      t = threading.Thread(target=self.createdatafile, args=(f,))
       threads.append(t)
       t.start()
 
@@ -381,9 +355,7 @@ if __name__ == '__main__':
   reindex_data.add_argument('--postfixnum', default='num',
                             help='Reindex postfix.')
   reindex_data.add_argument('--statfile', default='statfile', required=False,
-                            help='stat mapping file.')                            
-  reindex_data.add_argument('--version', type=int, default=2, required=False,
-                            help='1: random neg 2: low tfidf.')
+                            help='stat mapping file.')
   reindex_data.add_argument('--vocalsize', type=int, default=100000, required=False,
                             help='stat mapping file.')
   reindex_data.set_defaults(func=lambda args: StatData(args).createdata())

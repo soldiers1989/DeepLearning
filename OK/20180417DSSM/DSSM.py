@@ -1,6 +1,9 @@
 # coding: utf-8
 
+import datetime
+
 import keras.backend as K
+import numpy as np
 import tensorflow as tf
 from MPInputAnsyVedio import MPInputAnsyVedio
 from keras import optimizers
@@ -9,10 +12,6 @@ from keras.layers import Dense
 from keras.layers import Dot
 from keras.layers import Input
 from keras.models import Model
-from keras.callbacks import ModelCheckpoint
-import numpy as np
-import datetime
-from time import time
 
 param = {
   'inputpath'   : 'data/',

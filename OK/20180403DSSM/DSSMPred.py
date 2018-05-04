@@ -1,6 +1,7 @@
 # coding: utf-8
 
 import keras.backend as K
+import numpy as np
 import tensorflow as tf
 from MPInputAnsyVedio import MPInputAnsyVedio
 from keras.layers import Dense
@@ -8,7 +9,6 @@ from keras.layers import Dot
 from keras.layers import Input
 from keras.models import Model
 from keras.models import load_model
-import numpy as np
 
 param = {
   'inputpath' : 'data/',

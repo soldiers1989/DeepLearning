@@ -1,8 +1,8 @@
 # coding: utf-8
 
-import sys
-import numpy as np
 import math
+import sys
+
 from MPInputAnsyVedio import TxtFilesRandomReader
 
 Py3 = sys.version_info[0] == 3

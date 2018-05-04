@@ -6,6 +6,7 @@ import pickle
 import random
 import datetime
 import threading
+import codecs
 import numpy as np
 import argparse
 from itertools import product
@@ -39,7 +40,7 @@ class TxtFilesConcurrentRandomReaderV2(object):
       tmpfiles.append([fname, fsize])
     [ii.append(round(float(ii[1]) * 1000 / filesizemin)) for ii in tmpfiles]
     self.files = tmpfiles
-    print(self.files)
+    print('TxtFilesConcurrentRandomReaderV2:'+str(self.files))
 
     self.epochs = args.get('inputepochs', 0)
     self.nowepochs = 0
@@ -66,7 +67,8 @@ class TxtFilesConcurrentRandomReaderV2(object):
     self.readfileprobs = []
     sumprob = sum([f[2] for f in self.files])
     for f in self.files:
-      fd = open(f[0], 'r')
+      #fd = open(f[0], 'r')
+      fd = codecs.open(f[0], 'r', 'utf-8')
       self.openfile.append((fd, f[2] * 1.0 / sumprob))
       self.readfileprobs.append(f[2] * 1.0 / sumprob)
     if self.verbose==2: print(self.openfile)
@@ -215,13 +217,13 @@ class TxtFilesRandomReader(object):
     self.lines = self.lines[size:]
     return ret
 
-class MPInputAnsy(object):
+class MPInputAnsyVedio(object):
   def __init__(self, inputargs):
     self.args = inputargs
     self.dimquery =  inputargs['dimquery']
     self.dimdoc =  inputargs['dimdoc']
     self.inputpath = inputargs['inputpath']
-
+    
     self.dataset = []
     self.testset = []
     self.predset = []
@@ -280,15 +282,19 @@ class MPInputAnsy(object):
     queries = []
     docs = []
     labels = []
+    pred = []
     for line in lines:      
       fields = line.strip().split(',')
-      if len(fields) != 3: continue
+      if len(fields) < 3: continue
       
       queries.append(self.processing_doc(fields[0], self.dimquery))
       docs.append(self.processing_doc(fields[1], self.dimdoc))
       labels.append(int(fields[2]))
+      
+      if len(fields) == 4:
+        pred.append(fields[3])
 
-    return {'Q': queries, 'D': docs, 'Y': labels, 'L': len(queries)}
+    return {'Q': queries, 'D': docs, 'Y': labels, 'L': len(queries), 'ID': pred }
 
   def read_traindata_batch(self, size=256):
     with self.readlock:
@@ -370,16 +376,38 @@ class MPInputAnsy(object):
     return self.testdataqueue.get()
 
   def read_preddata_batch(self, size=256):
-    ids = []
-    features = []
+    queries = []
+    docs = []
+    labels = []
+    pred = []
     lines = self.preddata.read_batch(size)
-    for line in lines:
-      fields = line.strip().split('#')
-      if len(fields) != 3: continue
-      features.append(self.processing_doc(fields[2]))
-      ids.append(fields[0])
+    for line in lines:      
+      fields = line.strip().split(',')
+      if len(fields) < 3: continue
+      
+      queries.append(self.processing_doc(fields[0], self.dimquery))
+      docs.append(self.processing_doc(fields[1], self.dimdoc))
+      labels.append(int(fields[2]))
+      
+      if len(fields) == 4:
+        pred.append(fields[3])
 
-    return {'X': features, 'ID': ids, 'L': len(features)}
+    return {'Q': queries, 'D': docs, 'Y': labels, 'L': len(queries), 'ID': pred }
+
+#the old code   
+#    ids = []
+#    features = []
+#    lines = self.preddata.read_batch(size)
+#    for line in lines:
+#      fields = line.strip().split('#')
+#      if len(fields) != 3: continue
+#      if self.predselector==1:
+#        features.append(self.processing_doc(fields[2], self.dimquery))
+#      else:       
+#        features.append(self.processing_doc(fields[3], self.dimdoc))
+#      ids.append(fields[0])
+#
+#    return {'X': features, 'ID': ids, 'L': len(features)}
 
   def has_predset(self):
     return len(self.predset) > 0
@@ -410,36 +438,44 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Run Reindex.")
   parser.add_argument('--inputpath', default='data/', required=False,
                       help='Input data path.')
-  parser.add_argument('--dataset', nargs='+', default=['sample.bincai.txt.num', 'sample.bincai2.txt.num'],
+  parser.add_argument('--dataset', nargs='+', default=['vedio.txt.num', 'vedio.txt2.num'],
                       help='Choose a train dataset.')
   parser.add_argument('--testset', nargs='*', default=[],
                       help='Choose a test dataset.')
-  parser.add_argument('--predset', nargs='*', default=['praw.txt.num', 'praw2.txt.num'],
+  parser.add_argument('--predset', nargs='*', default=['vedio.txt.num', 'vedio.txt2.num'],
                       help='Choose a pred dataset.')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
   parser.add_argument('--batch_size', type=int, default=2,
                       help='Data batch size')
-  #parser.add_argument('--dim', type=int, default=12540,
-  parser.add_argument('--dimquery', type=int, default=64,
+  parser.add_argument('--dimquery', type=int, default=5799,  #13715
                       help='Data dim query')
-  parser.add_argument('--dimdoc', type=int, default=64,
+  parser.add_argument('--dimdoc', type=int, default=4858,  #12774
                       help='Data dim query')
+  parser.add_argument('--pred', default='query', required=False,
+                      help='Witch part to pred')
   args = parser.parse_args()
   print(vars(args))
-  readdata = MPInputAnsy(vars(args))
+  readdata = MPInputAnsyVedio(vars(args))
   
   ret = readdata.read_preddata_batch(size=3)
+  if ret['L']>0:
+    print(ret['ID'])
+    print(ret['Q'])
+    
   while ret['L']>0:
     print(ret['L'])
     ret = readdata.read_preddata_batch(size=3)
-#  print('*'*20)
-#  ret = readdata.read_preddata_batch(size=3)
-#  print(ret)
+  print('*'*20)
+  ret = readdata.read_preddata_batch(size=3)
+  print(ret)
   
+#  return {'Q': queries, 'D': docs, 'Y': labels, 'L': len(queries), 'P': pred }
 #  readdata.start_ansyc()
 #  train_data = readdata.read_traindata_batch_ansyc()  
 #  print(train_data)
+#  print(train_data['Q'][0].shape)
+#  print(train_data['D'][0].shape)
 #  train_data = readdata.read_traindata_batch_ansyc()  
 #  print(train_data)
 #  readdata.stop_and_wait_ansyc()

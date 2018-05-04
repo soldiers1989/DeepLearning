@@ -6,21 +6,11 @@ from tensorflow.contrib.tensorboard.plugins import projector
 
 logdir='log'
 # load model
-#df_train = pd.read_csv(
-#    tf.gfile.Open('.'+os.sep+'data'+os.sep+'wechat.game.csv'),
-#    skipinitialspace=True,
-#    engine="python",
-#    skiprows=0)
-#uinlist=df_train['uin']
-#del df_train['uin']
-#embedding=df_train.values
-
 df_train = pd.read_csv(
     tf.gfile.Open('.'+os.sep+'data'+os.sep+'att.csv'),
     skipinitialspace=True, 
     engine="python",
     skiprows=0)
-    
 uinlist=df_train['uin']
 del df_train['uin']
 embedding=df_train.values

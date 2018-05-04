@@ -6,6 +6,7 @@ import keras.backend as K
 import numpy as np
 import tensorflow as tf
 from MPInputAnsyVedio import MPInputAnsyVedio
+from keras import losses
 from keras import optimizers
 from keras.callbacks import LearningRateScheduler
 from keras.layers import Dense
@@ -45,7 +46,7 @@ param2 = {
   'outer_epochs': 20
 }
 
-param=param2
+#param=param2
 
 def log2(x):
   numerator = tf.log(x)
@@ -63,7 +64,11 @@ def jun_loss(y_true, y_pred):
   return y_true * 1 / 4 * K.square((1 - y_pred)) + (1 - y_true) * log2(1 + K.maximum(y_pred, 0))
 
 def paper_loss(y_true, y_pred):
-  return y_true * 1 / 4 * K.square((1 - y_pred)) + (1 - y_true) * K.square(K.maximum(y_pred, 0))
+  #return y_true * 1 / 4 * K.square((1 - y_pred)) + (1 - y_true) * K.square(K.maximum(y_pred, 0))
+  y_pred = K.squeeze(y_pred, axis=1)
+  y_true = K.squeeze(y_true, axis=1)
+  loss = K.mean( y_true * 1/4 * K.square((1 - y_pred)) + (1 - y_true) * K.square(K.maximum(y_pred, 0)) )
+  return loss
 
 def accuracy(y_true, y_pred):
   return K.mean(K.equal(y_true, K.cast(y_pred > 0.5, y_true.dtype)))
@@ -104,11 +109,11 @@ def auc(y_true, y_pred):
 
 def get_lr(epoch):
   if epoch < 10:
-    return 0.0015
-  elif epoch >= 10 and epoch < 20:
     return 0.001
-  else:
+  elif epoch >= 10 and epoch < 20:
     return 0.0005
+  else:
+    return 0.0002
 
 def create_dnn_model(vocab_size, modelname):
   ninput = Input(shape=(vocab_size,))
@@ -151,10 +156,11 @@ def validation_data_generator(dateset):
     yield x_valid, y_valid
 
 def train3(dateset):
-  lr = LearningRateScheduler(get_lr)
+  lrdecay = LearningRateScheduler(get_lr)
   model, query_model, doc_model = model_framework_bincai()
 
-  model.compile(optimizer=optimizers.Nadam(lr=0.001), loss=paper_loss, metrics=[accuracy, precision, recall, auc])
+  #model.compile(optimizer=optimizers.Nadam(lr=0.001), loss=paper_loss, metrics=[accuracy, precision, recall, auc])
+  model.compile(optimizer=optimizers.Nadam(lr=0.0002), loss=losses.binary_crossentropy, metrics=[accuracy, precision, recall, auc])
 
   #  train_data = readdata.read_traindata_batch_ansyc()
   #  x_train = [ np.array(train_data['Q']), np.array(train_data['D']) ]
