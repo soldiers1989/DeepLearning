@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
-import VedioMatchUtils
-from VedioMatchInputAnsy import VedioMatchInputAnsy
+
 import os
-import sys
-import math
-import tensorflow as tf
-import numpy as np
 import time
+
+import VedioMatchUtils
+import numpy as np
+import tensorflow as tf
+from VedioMatchInputAnsy import VedioMatchInputAnsy
 
 param = {
   'inputpath': 'data/',

@@ -7,20 +7,12 @@ from sklearn.metrics import roc_auc_score, recall_score, precision_score, accura
 import math
 import sys
 
-def tanh_y (x, w, b, keep_prob=1.0):
+def calculate_y (x, w, b, keep_prob=1.0):
   y = tf.matmul(x, w) + b
   y = tf.nn.dropout(y, keep_prob)
   return tf.nn.tanh(y)
-  
-def relu_y (x, w, b, keep_prob=1.0):
-  y = tf.matmul(x, w) + b
-  y = tf.nn.dropout(y, keep_prob)
-  return tf.nn.relu(y)
-  
-def softsign_y (x, w, b, keep_prob=1.0):
-  y = tf.matmul(x, w) + b
-  y = tf.nn.dropout(y, keep_prob)
-  return tf.nn.softsign(y)
+  #return tf.nn.relu(y)
+  #return tf.nn.softsign(y)
 
 def create_w_b(in_size, out_size, w_name="w", b_name="b", fc_type=tf.float32):
   if (in_size < 1 or out_size < 1):
