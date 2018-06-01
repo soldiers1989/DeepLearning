@@ -6,7 +6,7 @@ from __future__ import print_function
 import os
 import time
 
-import VedioMatchUtils
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyInputAnsy import VedioDSSMInputAnsy
@@ -125,10 +125,10 @@ def main():
 
   ## define embeddings
   # 个人信息没有0
-  embed_userattr = VedioMatchUtils.add_embedding(param['userattr_size'], param['emb_size'], '', 1,
-                                                 emb_name="embed_userattr")
-  embed_vedioattr = VedioMatchUtils.add_embedding_with_zero(param['vedioattr_size'], param['emb_size'], '', 1,
-                                                            emb_name="embed_vedioattr")
+  embed_userattr = TFBCUtils.add_embedding(param['userattr_size'], param['emb_size'], '', 1,
+                                           emb_name="embed_userattr")
+  embed_vedioattr = TFBCUtils.add_embedding_with_zero(param['vedioattr_size'], param['emb_size'], '', 1,
+                                                      emb_name="embed_vedioattr")
 
   ##----------------------------input
   with tf.name_scope('input') as scope:
@@ -175,21 +175,21 @@ def main():
 
   ##----------------------------fc layer
   with tf.name_scope('fc') as scope:
-    fc_user_w0, fc_user_b0 = VedioMatchUtils.create_w_b(8 * param['emb_size'], param['emb_size'] * 2,
-                                                        w_name="fc_user_w0", b_name="fc_user_b0")
-    fc_user_w1, fc_user_b1 = VedioMatchUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_user_w1",
-                                                        b_name="fc_user_b1")
+    fc_user_w0, fc_user_b0 = TFBCUtils.create_w_b(8 * param['emb_size'], param['emb_size'] * 2,
+                                                  w_name="fc_user_w0", b_name="fc_user_b0")
+    fc_user_w1, fc_user_b1 = TFBCUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_user_w1",
+                                                  b_name="fc_user_b1")
 
-    fc_item_w0, fc_item_b0 = VedioMatchUtils.create_w_b(4 * param['emb_size'], param['emb_size'] * 2,
-                                                        w_name="fc_item_w0", b_name="fc_item_b0")
-    fc_item_w1, fc_item_b1 = VedioMatchUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_item_w1",
-                                                        b_name="fc_item_b1")
+    fc_item_w0, fc_item_b0 = TFBCUtils.create_w_b(4 * param['emb_size'], param['emb_size'] * 2,
+                                                  w_name="fc_item_w0", b_name="fc_item_b0")
+    fc_item_w1, fc_item_b1 = TFBCUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_item_w1",
+                                                  b_name="fc_item_b1")
 
-    user_z0 = VedioMatchUtils.calculate_y(concat_user, fc_user_w0, fc_user_b0, keep_prob)
-    user_z1 = VedioMatchUtils.calculate_y(user_z0, fc_user_w1, fc_user_b1, keep_prob)
+    user_z0 = TFBCUtils.calculate_y(concat_user, fc_user_w0, fc_user_b0, keep_prob)
+    user_z1 = TFBCUtils.calculate_y(user_z0, fc_user_w1, fc_user_b1, keep_prob)
 
-    item_z0 = VedioMatchUtils.calculate_y(concat_item, fc_item_w0, fc_item_b0, keep_prob)
-    item_z1 = VedioMatchUtils.calculate_y(item_z0, fc_item_w1, fc_item_b1, keep_prob)
+    item_z0 = TFBCUtils.calculate_y(concat_item, fc_item_w0, fc_item_b0, keep_prob)
+    item_z1 = TFBCUtils.calculate_y(item_z0, fc_item_w1, fc_item_b1, keep_prob)
 
     user_z1_n = tf.nn.l2_normalize(user_z1, 1)
     item_z1_n = tf.nn.l2_normalize(item_z1, 1)
@@ -272,7 +272,7 @@ def main():
         lv, user_z1_out, item_z1_out, item_i, user_i, cos_similarity_out, pred_out = \
           session.run([loss, user_z1_n, item_z1_n, concat_item, concat_user, cos_similarity, pred], \
                       feed_dict=debug_dict)
-        VedioMatchUtils.print_model_data(lv, user_z1_out, item_z1_out, item_i, user_i, cos_similarity_out, pred_out)
+        TFBCUtils.print_model_data(lv, user_z1_out, item_z1_out, item_i, user_i, cos_similarity_out, pred_out)
 
         test_data = readdata.read_testdata_batch_ansyc()
         feed_dict = {
@@ -295,7 +295,7 @@ def main():
         lv, user_z1_out, item_z1_out, cos_similarity_out, pred_out = \
           session.run([loss, user_z1_n, item_z1_n, cos_similarity, pred], feed_dict=feed_dict)
 
-        acc, prec, rec, auc = VedioMatchUtils.get_accprecrecauc(pred_out, test_data['label'], cos_similarity_out)
+        acc, prec, rec, auc = TFBCUtils.get_accprecrecauc(pred_out, test_data['label'], cos_similarity_out)
         print('[Test]\tIter:%d\tloss=%.6f\taccuracy=%.6f\tprecision=%.6f\trecall=%.6f\tauc=%.6f' % (step, lv, acc, prec, rec, auc), end='\n')
         print("-----------------------------------------")
 

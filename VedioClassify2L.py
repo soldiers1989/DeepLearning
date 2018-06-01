@@ -6,7 +6,7 @@ from __future__ import print_function
 import os
 import time
 
-import VedioMatchUtils
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyInputAnsy import VedioClassifyInputAnsy
@@ -19,7 +19,7 @@ param = {
   'predset': [],
 
   'shuffle_file': True,
-  'batch_size': 32,
+  'batch_size': 64,
   'batch_size_test': 1024,
   'test_batch': 100,
   'save_batch': 500,
@@ -38,7 +38,7 @@ param2 = {
   'predset': [],
 
   'shuffle_file': True,
-  'batch_size': 64, # 12862
+  'batch_size': 32, # 12862
   'batch_size_test': 10240,
   'test_batch': 1000,
   'save_batch': 6000,
@@ -47,7 +47,7 @@ param2 = {
   'keep_prob': 0.5
 }
 
-#param.update(param2)
+param.update(param2)
 
 def main():
   start_time = time.strftime('%m%d%Y%H%M', time.localtime(time.time()))
@@ -57,11 +57,14 @@ def main():
   input_dim = 1000
   input_dim2 = 2000
   input_dim5 = 5000
+  mid_dim = 256
   output_dim = 28
   output_dim2 = 174
 
   ##----------------------------input
   with tf.name_scope('input') as scope:
+    lda1000 = tf.placeholder(dtype='float', shape=[None, input_dim], name='input_lda1000')
+    lda2000 = tf.placeholder(dtype='float', shape=[None, input_dim2], name='input_lda2000')
     lda5000 = tf.placeholder(dtype='float', shape=[None, input_dim5], name='input_lda5000')
     label1 = tf.placeholder(dtype='float', shape=[None, output_dim], name='input_label1')
     label2 = tf.placeholder(dtype='float', shape=[None, output_dim2], name='input_labe2')
@@ -69,30 +72,42 @@ def main():
   with tf.name_scope('param') as scope:
     keep_prob = tf.placeholder(dtype="float", name='keep_prob')
     global_step = tf.placeholder(dtype=np.int32, name="global_step")
+    
+  ##----------------------------concat layer
+  with tf.name_scope('concat') as scope:
+    concat_item = tf.concat([lda1000, lda2000, lda5000], 1)
 
   ##----------------------------fc layer
   with tf.name_scope('fc') as scope:
-    fc1_w0 = tf.Variable(tf.zeros([input_dim5, output_dim]), name='fc_w0')  
-    fc1_b0 = tf.Variable(tf.zeros([output_dim]), name='fc_b0') 
+#    fc1_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim]), name='fc_w0')  
+#    fc1_b0 = tf.Variable(tf.zeros([output_dim]), name='fc_b0') 
+#    
+#    fc2_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim2]), name='fc_w0')  
+#    fc2_b0 = tf.Variable(tf.zeros([output_dim2]), name='fc_b0') 
     
-    fc2_w0 = tf.Variable(tf.zeros([input_dim5, output_dim2]), name='fc_w0')  
-    fc2_b0 = tf.Variable(tf.zeros([output_dim2]), name='fc_b0') 
+    fc1_w0, fc1_b0 = TFBCUtils.create_w_b(input_dim+input_dim2+input_dim5, mid_dim, w_name="fc1_w0", b_name="fc1_b0")
+    fc21_w0, fc21_b0 = TFBCUtils.create_w_b(mid_dim, output_dim, w_name="fc21_w0", b_name="fc21_b0")
+    fc22_w0, fc22_b0 = TFBCUtils.create_w_b(mid_dim, output_dim2, w_name="fc22_w0", b_name="fc22_b0")
+    
+  ##----------------------------fc layer
+  with tf.name_scope('fc') as scope:    
+    layer1out = tf.nn.relu( tf.matmul(concat_item, fc1_w0) + fc1_b0 )
+    #layer1out = tf.nn.dropout(layer1out, keep_prob)
 
   ##----------------------------loss layer
   with tf.name_scope('loss') as scope:
-    pred1 = tf.nn.softmax( tf.matmul(lda5000, fc1_w0) + fc1_b0 )
+    pred1 = tf.nn.softmax( tf.matmul(layer1out, fc21_w0) + fc21_b0 )
     cross_entropy1 = -tf.reduce_sum(label1 * tf.log(pred1))
     
-    pred2 = tf.nn.softmax( tf.matmul(lda5000, fc2_w0) + fc2_b0 )
+    pred2 = tf.nn.softmax( tf.matmul(layer1out, fc22_w0) + fc22_b0 )
     cross_entropy2 = -tf.reduce_sum(label2 * tf.log(pred2))
     
-    cross_weight1 = tf.constant(0.5, dtype='float')
-    cross_weight2 = tf.constant(0.5, dtype='float')
+    cross_weight1 = tf.constant(0.2, dtype='float')
+    cross_weight2 = tf.constant(0.8, dtype='float')
     cross_entropy = cross_weight1*cross_entropy1 + cross_weight2*cross_entropy2
     
-    learning_rate = tf.train.exponential_decay(0.005, global_step, param['decay_steps'], 0.98)
+    learning_rate = tf.train.exponential_decay(0.0002, global_step, param['decay_steps'], 0.98)
     optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
-    #optimizer = tf.train.FtrlOptimizer(learning_rate, l1_regularization_strength=0.01, l2_regularization_strength=0.00001)
 
   ##----------------------------acc compute
   with tf.name_scope('acc') as scope:
@@ -124,7 +139,8 @@ def main():
         lda1000: train_data['lda1000'],
         lda2000: train_data['lda2000'],
         lda5000: train_data['lda5000'],
-        global_step: step
+        global_step: step,
+        keep_prob: param['keep_prob']
       }
   
       if (step > 0 and step % param['test_batch'] == 0):
@@ -149,7 +165,8 @@ def main():
           lda1000: test_data['lda1000'],
           lda2000: test_data['lda2000'],
           lda5000: test_data['lda5000'],
-          global_step: step
+          global_step: step,
+          keep_prob: 1
         }
   
         ## get acc

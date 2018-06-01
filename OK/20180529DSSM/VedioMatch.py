@@ -6,7 +6,7 @@ from __future__ import print_function
 import os
 import time
 
-import VedioMatchUtils
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioMatchInputAnsy import VedioMatchInputAnsy
@@ -128,10 +128,10 @@ def main():
 
   ## define embeddings
   # 个人信息没有0
-  embed_userattr = VedioMatchUtils.add_embedding(param['userattr_size'], param['emb_size'], '', 1,
-                                                 emb_name="embed_userattr")
-  embed_vedioattr = VedioMatchUtils.add_embedding_with_zero(param['vedioattr_size'], param['emb_size'], '', 1,
-                                                            emb_name="embed_vedioattr")
+  embed_userattr = TFBCUtils.add_embedding(param['userattr_size'], param['emb_size'], '', 1,
+                                           emb_name="embed_userattr")
+  embed_vedioattr = TFBCUtils.add_embedding_with_zero(param['vedioattr_size'], param['emb_size'], '', 1,
+                                                      emb_name="embed_vedioattr")
 
   ##----------------------------input
   with tf.name_scope('input') as scope:
@@ -185,24 +185,24 @@ def main():
 
   ##----------------------------fc layer
   with tf.name_scope('fc') as scope:
-    fc_user_w0, fc_user_b0 = VedioMatchUtils.create_w_b(8 * param['emb_size'], param['emb_size'] * 2,
-                                                        w_name="fc_user_w0", b_name="fc_user_b0")
-    fc_user_w1, fc_user_b1 = VedioMatchUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_user_w1",
-                                                        b_name="fc_user_b1")
+    fc_user_w0, fc_user_b0 = TFBCUtils.create_w_b(8 * param['emb_size'], param['emb_size'] * 2,
+                                                  w_name="fc_user_w0", b_name="fc_user_b0")
+    fc_user_w1, fc_user_b1 = TFBCUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_user_w1",
+                                                  b_name="fc_user_b1")
 
-    fc_item_w0, fc_item_b0 = VedioMatchUtils.create_w_b(4 * param['emb_size'], param['emb_size'] * 2,
-                                                        w_name="fc_item_w0", b_name="fc_item_b0")
-    fc_item_w1, fc_item_b1 = VedioMatchUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_item_w1",
-                                                        b_name="fc_item_b1")
+    fc_item_w0, fc_item_b0 = TFBCUtils.create_w_b(4 * param['emb_size'], param['emb_size'] * 2,
+                                                  w_name="fc_item_w0", b_name="fc_item_b0")
+    fc_item_w1, fc_item_b1 = TFBCUtils.create_w_b(param['emb_size'] * 2, param['emb_size'], w_name="fc_item_w1",
+                                                  b_name="fc_item_b1")
 
-    user_z0 = VedioMatchUtils.calculate_y(concat_user, fc_user_w0, fc_user_b0, keep_prob)
-    user_z1 = VedioMatchUtils.calculate_y(user_z0, fc_user_w1, fc_user_b1, keep_prob)
+    user_z0 = TFBCUtils.calculate_y(concat_user, fc_user_w0, fc_user_b0, keep_prob)
+    user_z1 = TFBCUtils.calculate_y(user_z0, fc_user_w1, fc_user_b1, keep_prob)
 
-    pos_z0 = VedioMatchUtils.calculate_y(concat_pos, fc_item_w0, fc_item_b0, keep_prob)
-    pos_z1 = VedioMatchUtils.calculate_y(pos_z0, fc_item_w1, fc_item_b1, keep_prob)
+    pos_z0 = TFBCUtils.calculate_y(concat_pos, fc_item_w0, fc_item_b0, keep_prob)
+    pos_z1 = TFBCUtils.calculate_y(pos_z0, fc_item_w1, fc_item_b1, keep_prob)
 
-    neg_z0 = VedioMatchUtils.calculate_y(concat_neg, fc_item_w0, fc_item_b0, keep_prob)
-    neg_z1 = VedioMatchUtils.calculate_y(neg_z0, fc_item_w1, fc_item_b1, keep_prob)
+    neg_z0 = TFBCUtils.calculate_y(concat_neg, fc_item_w0, fc_item_b0, keep_prob)
+    neg_z1 = TFBCUtils.calculate_y(neg_z0, fc_item_w1, fc_item_b1, keep_prob)
 
     user_z1_n = tf.nn.l2_normalize(user_z1, 1)
     pos_z1_n = tf.nn.l2_normalize(pos_z1, 1)
@@ -210,7 +210,7 @@ def main():
 
   ##----------------------------loss layer
   with tf.name_scope('loss') as scope:
-    loss = VedioMatchUtils.compute_triplet_loss(user_z1_n, pos_z1_n, neg_z1_n, param['margin'])
+    loss = TFBCUtils.compute_triplet_loss(user_z1_n, pos_z1_n, neg_z1_n, param['margin'])
     learning_rate = tf.train.exponential_decay(0.002, global_step, param['decay_steps'], 0.98)
     optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
   # grads_and_vars = optimizer.compute_gradients(loss)
@@ -281,7 +281,7 @@ def main():
         lv, user_z1_out, pos_z1_out, neg_z1_out, pos_i, neg_i, user_i = \
           session.run([loss, user_z1_n, pos_z1_n, neg_z1_n, concat_pos, concat_neg, concat_user], \
                       feed_dict=debug_dict)
-        VedioMatchUtils.print_model_data(lv, user_z1_out, pos_z1_out, neg_z1_out, pos_i, neg_i, user_i)
+        TFBCUtils.print_model_data(lv, user_z1_out, pos_z1_out, neg_z1_out, pos_i, neg_i, user_i)
 
         test_data = readdata.read_testdata_batch_ansyc()
         feed_dict = {
@@ -305,7 +305,7 @@ def main():
         lv, user_z1_out, pos_z1_out, neg_z1_out = \
           session.run([loss, user_z1_n, pos_z1_n, neg_z1_n], feed_dict=feed_dict)
 
-        acc, prec, rec, auc = VedioMatchUtils.get_accprecrecauc(user_z1_out, pos_z1_out, neg_z1_out, param['margin'])
+        acc, prec, rec, auc = TFBCUtils.get_accprecrecauc(user_z1_out, pos_z1_out, neg_z1_out, param['margin'])
         print('[Test]\tIter:%d\tloss=%.6f\taccuracy=%.6f\tprecision=%.6f\trecall=%.6f\tauc=%.6f' % (
         step, lv, acc, prec, rec, auc), end='\n')
         print("-----------------------------------------")

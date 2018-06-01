@@ -64,8 +64,9 @@ def main():
   with tf.name_scope('input') as scope:
     lda1000 = tf.placeholder(dtype='float', shape=[None, input_dim], name='input_lda1000')
     lda2000 = tf.placeholder(dtype='float', shape=[None, input_dim2], name='input_lda2000')
-    lda5000 = tf.placeholder(dtype='float', shape=[None, input_dim5], name='input_lda2000')
-    label2 = tf.placeholder(dtype='float', shape=[None, output_dim2], name='input_label')
+    lda5000 = tf.placeholder(dtype='float', shape=[None, input_dim5], name='input_lda5000')
+    label1 = tf.placeholder(dtype='float', shape=[None, output_dim], name='input_label1')
+    label2 = tf.placeholder(dtype='float', shape=[None, output_dim2], name='input_labe2')
 
   with tf.name_scope('param') as scope:
     keep_prob = tf.placeholder(dtype="float", name='keep_prob')
@@ -77,24 +78,39 @@ def main():
 
   ##----------------------------fc layer
   with tf.name_scope('fc') as scope:
-    #fc_w0, fc_b0 = VedioMatchUtils.create_w_b(input_dim, output_dim, w_name="fc_w0", b_name="fc_b0")
-    fc_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim2]), name='fc_w0')  
-    fc_b0 = tf.Variable(tf.zeros([output_dim2]), name='fc_b0') 
+    fc1_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim]), name='fc_w0')  
+    fc1_b0 = tf.Variable(tf.zeros([output_dim]), name='fc_b0') 
+    
+    fc2_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim2]), name='fc_w0')  
+    fc2_b0 = tf.Variable(tf.zeros([output_dim2]), name='fc_b0') 
 
   ##----------------------------loss layer
   with tf.name_scope('loss') as scope:
-    pred = tf.nn.softmax( tf.matmul(concat_item, fc_w0) + fc_b0 )
-    cross_entropy = -tf.reduce_sum(label2 * tf.log(pred))
-    learning_rate = tf.train.exponential_decay(0.01, global_step, param['decay_steps'], 0.98)
-    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
-    #optimizer = tf.train.FtrlOptimizer(learning_rate, l1_regularization_strength=0.01, l2_regularization_strength=0.00001)
+    pred1 = tf.nn.softmax( tf.matmul(concat_item, fc1_w0) + fc1_b0 )
+    cross_entropy1 = -tf.reduce_sum(label1 * tf.log(pred1))
+    
+    pred2 = tf.nn.softmax( tf.matmul(concat_item, fc2_w0) + fc2_b0 )
+    cross_entropy2 = -tf.reduce_sum(label2 * tf.log(pred2))
+    
+    cross_weight1 = tf.constant(0.5, dtype='float')
+    cross_weight2 = tf.constant(0.5, dtype='float')
+    cross_entropy = cross_weight1*cross_entropy1 + cross_weight2*cross_entropy2
+    
+    learning_rate = tf.train.exponential_decay(0.005, global_step, param['decay_steps'], 0.98)
+    #optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+    optimizer = tf.train.FtrlOptimizer(learning_rate, l1_regularization_strength=0.0005, l2_regularization_strength=0.00001).minimize(cross_entropy)
 
   ##----------------------------acc compute
   with tf.name_scope('acc') as scope:
-    pred_argmax = tf.argmax(pred, 1)
-    label_argmax = tf.argmax(label2, 1)
-    correct_prediction = tf.equal(pred_argmax, label_argmax)
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+    pred1_argmax = tf.argmax(pred1, 1)
+    label1_argmax = tf.argmax(label1, 1)
+    correct_prediction1 = tf.equal(pred1_argmax, label1_argmax)
+    accuracy1 = tf.reduce_mean(tf.cast(correct_prediction1, "float"))
+    
+    pred2_argmax = tf.argmax(pred2, 1)
+    label2_argmax = tf.argmax(label2, 1)
+    correct_prediction2 = tf.equal(pred2_argmax, label2_argmax)
+    accuracy2 = tf.reduce_mean(tf.cast(correct_prediction2, "float"))
 
   readdata = VedioClassifyInputAnsy(param)
   readdata.start_ansyc()
@@ -109,6 +125,7 @@ def main():
   
       ## feed data to tf session
       feed_dict = {
+        label1: train_data['label1'],
         label2: train_data['label2'],
         lda1000: train_data['lda1000'],
         lda2000: train_data['lda2000'],
@@ -118,14 +135,22 @@ def main():
   
       if (step > 0 and step % param['test_batch'] == 0):
         ## run optimizer
-        _, l, lr, pa, la, acc = session.run([optimizer, cross_entropy, learning_rate, pred_argmax, label_argmax, accuracy], feed_dict=feed_dict)
-        print('[Train]\tIter:%d\tloss=%.6f\tlr=%.6f\taccuracy=%.6f\tts=%s' % 
-          ( step, l/train_data['L'], lr, acc, time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time()))), end='\n')
-        print('[Train L]\t%s' % str(la[:16]) )
-        print('[Train P]\t%s' % str(pa[:16]) )
+        _, l, cl1, cl2, lr, pa1, la1, pa2, la2, acc1, acc2 = session.run([optimizer, \
+            cross_entropy, cross_entropy1, cross_entropy2, learning_rate, \
+            pred1_argmax, label1_argmax, pred2_argmax, label2_argmax, \
+            accuracy1, accuracy2], \
+            feed_dict=feed_dict)
+        print('[Train]\tIter:%d\tloss=%.6f\tloss1=%.6f\tloss2=%.6f\tlr=%.6f\taccuracy1=%.6f\taccuracy2=%.6f\tts=%s' % 
+          ( step, l/train_data['L'], cl1/train_data['L'], cl2/train_data['L'], lr, acc1, acc2, \
+          time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time()))), end='\n')
+        print('[Test L]\t%s' % str(la1[:16]) )
+        print('[Test P]\t%s' % str(pa1[:16]) )
+        print('[Test L]\t%s' % str(la2[:16]) )
+        print('[Test P]\t%s' % str(pa2[:16]) )
   
         test_data = readdata.read_testdata_batch_ansyc()
         feed_dict = {
+          label1: test_data['label1'],
           label2: test_data['label2'],
           lda1000: test_data['lda1000'],
           lda2000: test_data['lda2000'],
@@ -134,11 +159,13 @@ def main():
         }
   
         ## get acc
-        acc, tl, pa, la = session.run([accuracy, cross_entropy, pred_argmax, label_argmax], feed_dict=feed_dict)
+        acc1, acc2, tl, pa1, la1, pa2, la2 = session.run([accuracy1, accuracy2, cross_entropy, pred1_argmax, label1_argmax, pred2_argmax, label2_argmax], feed_dict=feed_dict)
   
-        print('[Test]\tIter:%d\tloss=%.6f\taccuracy=%.6f' % ( step, tl/test_data['L'], acc), end='\n')
-        print('[Test L]\t%s' % str(la[:16]) )
-        print('[Test P]\t%s' % str(pa[:16]) )
+        print('[Test]\tIter:%d\tloss=%.6f\taccuracy1=%.6f\taccuracy2=%.6f' % ( step, tl/test_data['L'], acc1, acc2), end='\n')
+        print('[Test L]\t%s' % str(la1[:16]) )
+        print('[Test P]\t%s' % str(pa1[:16]) )
+        print('[Test L]\t%s' % str(la2[:16]) )
+        print('[Test P]\t%s' % str(pa2[:16]) )
         print("-----------------------------------------")
   
       else:

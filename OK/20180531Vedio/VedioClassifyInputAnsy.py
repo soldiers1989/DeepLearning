@@ -283,15 +283,17 @@ class VedioClassifyInputAnsy(object):
     data = [item.strip().split(':') for item in line.strip().split('#')]
     norm = sum([float(item[1]) for item in data])
     ret = np.zeros(topicnum)
-    for item in data:
-      ret[int(item[0])]=float(item[1])/norm
+    if norm>0:
+      for item in data:
+        ret[int(item[0])]=float(item[1])/norm
+    else:
+    	print('Error in parseLDAArray %s' % line)
     return ret
 
   def parseLable(self, line, labelnum):
     ret = np.zeros(labelnum)
     ret[int(line)] = 1.0
     return ret
-
 
   def processing_batch(self, lines):
 #   SELECT concat(lda1000, '|', lda500, '|', lda2000, '|', lda5000, '|', 
@@ -330,7 +332,7 @@ class VedioClassifyInputAnsy(object):
             'label2': label2,
             'lda1000': lda1000,
             'lda2000': lda2000,
-            'lda5000': lda5000	 }
+            'lda5000': lda5000   }
 
   def read_traindata_batch(self, size=32):
     with self.readlock:
