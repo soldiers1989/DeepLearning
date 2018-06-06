@@ -6,7 +6,6 @@ from __future__ import print_function
 import os
 import time
 
-import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyInputAnsy import VedioClassifyInputAnsy
@@ -55,32 +54,26 @@ def main():
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
   input_dim = 1000
-  input_dim2 = 2000
   output_dim = 28
 
   ##----------------------------input
   with tf.name_scope('input') as scope:
-    lda1000 = tf.placeholder(dtype='float', shape=[None, input_dim], name='input_lda1000')
-    lda2000 = tf.placeholder(dtype='float', shape=[None, input_dim2], name='input_lda2000')
+    lda = tf.placeholder(dtype='float', shape=[None, input_dim], name='input_lda')
     label = tf.placeholder(dtype='float', shape=[None, output_dim], name='input_label')
 
   with tf.name_scope('param') as scope:
     keep_prob = tf.placeholder(dtype="float", name='keep_prob')
     global_step = tf.placeholder(dtype=np.int32, name="global_step")
-    
-  ##----------------------------concat layer
-  with tf.name_scope('concat') as scope:
-    concat_item = tf.concat([lda1000, lda2000], 1)
 
   ##----------------------------fc layer
   with tf.name_scope('fc') as scope:
     #fc_w0, fc_b0 = VedioMatchUtils.create_w_b(input_dim, output_dim, w_name="fc_w0", b_name="fc_b0")
-    fc_w0 = tf.Variable(tf.zeros([input_dim+input_dim2, output_dim]), name='fc_w0')  
+    fc_w0 = tf.Variable(tf.zeros([input_dim, output_dim]), name='fc_w0')  
     fc_b0 = tf.Variable(tf.zeros([output_dim]), name='fc_b0') 
 
   ##----------------------------loss layer
   with tf.name_scope('loss') as scope:
-    pred = tf.nn.softmax( tf.matmul(concat_item, fc_w0) + fc_b0 )
+    pred = tf.nn.softmax( tf.matmul(lda, fc_w0) + fc_b0 )
     cross_entropy = -tf.reduce_sum(label * tf.log(pred))
     learning_rate = tf.train.exponential_decay(0.01, global_step, param['decay_steps'], 0.98)
     optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
@@ -106,8 +99,7 @@ def main():
       ## feed data to tf session
       feed_dict = {
         label: train_data['label1'],
-        lda1000: train_data['lda1000'],
-        lda2000: train_data['lda2000'],
+        lda: train_data['lda1000'],
         global_step: step
       }
   
@@ -121,16 +113,15 @@ def main():
   
         test_data = readdata.read_testdata_batch_ansyc()
         feed_dict = {
-	        label: test_data['label1'],
-	        lda1000: test_data['lda1000'],
-	        lda2000: test_data['lda2000'],
+          label: test_data['label1'],
+          lda: test_data['lda1000'],
           global_step: step
         }
   
         ## get acc
-        acc2, tl, pa, la = session.run([accuracy, cross_entropy, pred_argmax, label_argmax], feed_dict=feed_dict)
+        acc, tl, pa, la = session.run([accuracy, cross_entropy, pred_argmax, label_argmax], feed_dict=feed_dict)
   
-        print('[Test]\tIter:%d\tloss=%.6f\taccuracy=%.6f' % ( step, tl/test_data['L'], acc2), end='\n')
+        print('[Test]\tIter:%d\tloss=%.6f\taccuracy=%.6f' % ( step, tl/test_data['L'], acc), end='\n')
         print('[Test L]\t%s' % str(la[:16]) )
         print('[Test P]\t%s' % str(pa[:16]) )
         print("-----------------------------------------")

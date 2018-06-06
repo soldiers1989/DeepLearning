@@ -287,7 +287,7 @@ class VedioClassifyInputAnsy(object):
       for item in data:
         ret[int(item[0])]=float(item[1])/norm
     else:
-    	print('Error in parseLDAArray %s' % line)
+      print('Error in parseLDAArray %s' % line)
     return ret
 
   def parseLable(self, line, labelnum):
@@ -314,8 +314,8 @@ class VedioClassifyInputAnsy(object):
     lda1000 = []
     lda2000 = []
     lda5000 = []
+    addinfo = []
 
-    idx=0
     for line in lines:
       fields = line.strip().split('|')
       if len(fields) < 7 : continue
@@ -325,14 +325,15 @@ class VedioClassifyInputAnsy(object):
       lda1000.append(self.parseLDAArray(fields[0], 1000))
       lda2000.append(self.parseLDAArray(fields[2], 2000))
       lda5000.append(self.parseLDAArray(fields[3], 5000))
-      idx+=1
+      addinfo.append(fields[6])
 
-    return {'L': len(label1) if len(label1)==len(lda1000) else 0,
-            'label1': label1,
-            'label2': label2,
+    return {'L'      : len(label1) if len(label1)==len(lda1000) else 0,
+            'label1' : label1,
+            'label2' : label2,
             'lda1000': lda1000,
             'lda2000': lda2000,
-            'lda5000': lda5000   }
+            'lda5000': lda5000,
+            'addinfo': addinfo }
 
   def read_traindata_batch(self, size=32):
     with self.readlock:
@@ -360,7 +361,7 @@ class VedioClassifyInputAnsy(object):
     print('End thread for traindata.read_batch')
 
   def do_ansyc_testset(self):
-    print('Begin thread for traindata.read_batch')
+    print('Begin thread for testdata.read_batch')
     if self.has_testset():
       while self.ansy_run:
         now = datetime.datetime.now()
@@ -378,17 +379,28 @@ class VedioClassifyInputAnsy(object):
         logingfo = logingfo+' END PROC: '+now3.strftime("%Y-%m-%d %H:%M:%S")
         logingfo = logingfo+' DURA: '+str(now3-now2)+' SIZE: '+str(self.batch_size_test)
       if self.verbose==2: print(logingfo)
-    print('End thread for traindata.read_batch')
+    print('End thread for testdata.read_batch')
 
   def start_ansyc(self):
     self.threads = []
-    for ii in range(3):
-      t = threading.Thread(target=self.do_ansyc_trainset)
+    if len(self.dataset)>0:    
+      for ii in range(3):
+        t = threading.Thread(target=self.do_ansyc_trainset)
+        self.threads.append(t)
+        t.start()
+    else:
+      print('*'*20)
+      print('self.dataset is NULL')
+      print('*'*20)      
+    
+    if len(self.dataset)>0:
+      t = threading.Thread(target=self.do_ansyc_testset)
       self.threads.append(t)
       t.start()
-    t = threading.Thread(target=self.do_ansyc_testset)
-    self.threads.append(t)
-    t.start()
+    else:
+      print('*'*20)
+      print('self.testset is NULL')
+      print('*'*20)   
 
   def stop_and_wait_ansyc(self):
     self.ansy_run = False
@@ -414,23 +426,26 @@ class VedioClassifyInputAnsy(object):
     return self.testdataqueue.get()
 
   def read_preddata_batch(self, size=256):
-    queries = []
-    docs = []
-    labels = []
-    pred = []
+    lda1000 = []
+    lda2000 = []
+    lda5000 = []
+    addinfo = []
+
     lines = self.preddata.read_batch(size)
     for line in lines:
-      fields = line.strip().split(',')
-      if len(fields) < 3: continue
+      fields = line.strip().split('|')
+      if len(fields) < 7 : continue
 
-      queries.append(self.processing_doc(fields[0], self.dimquery))
-      docs.append(self.processing_doc(fields[1], self.dimdoc))
-      labels.append(int(fields[2]))
+      lda1000.append(self.parseLDAArray(fields[0], 1000))
+      lda2000.append(self.parseLDAArray(fields[2], 2000))
+      lda5000.append(self.parseLDAArray(fields[3], 5000))
+      addinfo.append(fields[6])
 
-      if len(fields) == 4:
-        pred.append(fields[3])
-
-    return {'Q': queries, 'D': docs, 'Y': labels, 'L': len(queries), 'ID': pred }
+    return {'L': len(lda1000) if len(addinfo)==len(lda1000) else 0,
+            'addinfo': addinfo,
+            'lda1000': lda1000,
+            'lda2000': lda2000,
+            'lda5000': lda5000  }
 
   def has_predset(self):
     return len(self.predset) > 0
@@ -476,30 +491,19 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(vars(args))
   readdata = VedioClassifyInputAnsy(vars(args))
+  
+  ret = readdata.read_preddata_batch(size=32)
+  if ret['L']>0:
+    print(ret)
 
-  readdata.start_ansyc()
-  train_data = readdata.read_testdata_batch_ansyc()
-  print(train_data)
+#  readdata.start_ansyc()
+#  train_data = readdata.read_testdata_batch_ansyc()
 #  print(train_data)
-#  print(train_data['Q'][0].shape)
-#  print(train_data['D'][0].shape)
-#  train_data = readdata.read_traindata_batch_ansyc()
-#  print(train_data)
-  readdata.stop_and_wait_ansyc()
-  
-  
-  
-#  ret = readdata.read_preddata_batch(size=32)
-#  if ret['L']>0:
-#    print(ret)
-    #print(ret['Q'])
-#
-#  while ret['L']>0:
-#    #print(ret['L'])
-#    print(ret)
-#    ret = readdata.read_preddata_batch(size=3)
-#  print('*'*20)
-#  ret = readdata.read_preddata_batch(size=3)
-#  print(ret)
+##  print(train_data)
+##  print(train_data['Q'][0].shape)
+##  print(train_data['D'][0].shape)
+##  train_data = readdata.read_traindata_batch_ansyc()
+##  print(train_data)
+#  readdata.stop_and_wait_ansyc()
 
 

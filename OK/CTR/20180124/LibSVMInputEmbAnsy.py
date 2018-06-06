@@ -621,7 +621,7 @@ class LoadLibSvmDataV2(object):
     print('End thread for traindata.read_batch')
 
   def do_ansyc_testset(self):
-    print('Begin thread for traindata.read_batch')
+    print('Begin thread for testdata.read_batch')
     if self.has_testset():
       while self.ansy_run:
         now = datetime.datetime.now()
@@ -642,7 +642,7 @@ class LoadLibSvmDataV2(object):
         logingfo = logingfo+' END PROC: '+now3.strftime("%H:%M:%S")
         logingfo = logingfo+' DURA: '+str(now3-now2)+' SIZE: '+str(self.batch_size_test)
         print(logingfo)
-    print('End thread for traindata.read_batch')
+    print('End thread for testdata.read_batch')
 
   def start_ansyc(self):
     self.threads = []

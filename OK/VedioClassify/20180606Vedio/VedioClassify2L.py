@@ -6,10 +6,11 @@ from __future__ import print_function
 import os
 import time
 
-import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyInputAnsy import VedioClassifyInputAnsy
+
+import TFBCUtils
 
 param = {
   'inputpath': 'data/',
@@ -47,7 +48,7 @@ param2 = {
   'keep_prob': 0.5
 }
 
-param.update(param2)
+#param.update(param2)
 
 def main():
   start_time = time.strftime('%m%d%Y%H%M', time.localtime(time.time()))
@@ -78,13 +79,7 @@ def main():
     concat_item = tf.concat([lda1000, lda2000, lda5000], 1)
 
   ##----------------------------fc layer
-  with tf.name_scope('fc') as scope:
-#    fc1_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim]), name='fc_w0')  
-#    fc1_b0 = tf.Variable(tf.zeros([output_dim]), name='fc_b0') 
-#    
-#    fc2_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim2]), name='fc_w0')  
-#    fc2_b0 = tf.Variable(tf.zeros([output_dim2]), name='fc_b0') 
-    
+  with tf.name_scope('fc') as scope:    
     fc1_w0, fc1_b0 = TFBCUtils.create_w_b(input_dim+input_dim2+input_dim5, mid_dim, w_name="fc1_w0", b_name="fc1_b0")
     fc21_w0, fc21_b0 = TFBCUtils.create_w_b(mid_dim, output_dim, w_name="fc21_w0", b_name="fc21_b0")
     fc22_w0, fc22_b0 = TFBCUtils.create_w_b(mid_dim, output_dim2, w_name="fc22_w0", b_name="fc22_b0")
@@ -92,7 +87,6 @@ def main():
   ##----------------------------fc layer
   with tf.name_scope('fc') as scope:    
     layer1out = tf.nn.relu( tf.matmul(concat_item, fc1_w0) + fc1_b0 )
-    #layer1out = tf.nn.dropout(layer1out, keep_prob)
 
   ##----------------------------loss layer
   with tf.name_scope('loss') as scope:

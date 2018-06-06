@@ -6,7 +6,6 @@ from __future__ import print_function
 import os
 import time
 
-import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyInputAnsy import VedioClassifyInputAnsy
@@ -47,7 +46,7 @@ param2 = {
   'keep_prob': 0.5
 }
 
-param.update(param2)
+#param.update(param2)
 
 def main():
   start_time = time.strftime('%m%d%Y%H%M', time.localtime(time.time()))
@@ -55,34 +54,44 @@ def main():
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
   input_dim = 1000
+  input_dim2 = 2000
+  input_dim5 = 5000
   output_dim = 28
+  output_dim2 = 174
 
   ##----------------------------input
   with tf.name_scope('input') as scope:
-    lda = tf.placeholder(dtype='float', shape=[None, input_dim], name='input_lda')
-    label = tf.placeholder(dtype='float', shape=[None, output_dim], name='input_label')
+    lda1000 = tf.placeholder(dtype='float', shape=[None, input_dim], name='input_lda1000')
+    lda2000 = tf.placeholder(dtype='float', shape=[None, input_dim2], name='input_lda2000')
+    lda5000 = tf.placeholder(dtype='float', shape=[None, input_dim5], name='input_lda2000')
+    label2 = tf.placeholder(dtype='float', shape=[None, output_dim2], name='input_label')
 
   with tf.name_scope('param') as scope:
     keep_prob = tf.placeholder(dtype="float", name='keep_prob')
     global_step = tf.placeholder(dtype=np.int32, name="global_step")
+    
+  ##----------------------------concat layer
+  with tf.name_scope('concat') as scope:
+    concat_item = tf.concat([lda1000, lda2000, lda5000], 1)
 
   ##----------------------------fc layer
   with tf.name_scope('fc') as scope:
     #fc_w0, fc_b0 = VedioMatchUtils.create_w_b(input_dim, output_dim, w_name="fc_w0", b_name="fc_b0")
-    fc_w0 = tf.Variable(tf.zeros([input_dim, output_dim]), name='fc_w0')  
-    fc_b0 = tf.Variable(tf.zeros([output_dim]), name='fc_b0') 
+    fc_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim2]), name='fc_w0')  
+    fc_b0 = tf.Variable(tf.zeros([output_dim2]), name='fc_b0') 
 
   ##----------------------------loss layer
   with tf.name_scope('loss') as scope:
-    pred = tf.nn.softmax( tf.matmul(lda, fc_w0) + fc_b0 )
-    cross_entropy = -tf.reduce_sum(label * tf.log(pred))
+    pred = tf.nn.softmax( tf.matmul(concat_item, fc_w0) + fc_b0 )
+    cross_entropy = -tf.reduce_sum(label2 * tf.log(pred))
     learning_rate = tf.train.exponential_decay(0.01, global_step, param['decay_steps'], 0.98)
     optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+    #optimizer = tf.train.FtrlOptimizer(learning_rate, l1_regularization_strength=0.01, l2_regularization_strength=0.00001)
 
   ##----------------------------acc compute
   with tf.name_scope('acc') as scope:
     pred_argmax = tf.argmax(pred, 1)
-    label_argmax = tf.argmax(label, 1)
+    label_argmax = tf.argmax(label2, 1)
     correct_prediction = tf.equal(pred_argmax, label_argmax)
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
@@ -99,8 +108,10 @@ def main():
   
       ## feed data to tf session
       feed_dict = {
-        label: train_data['label1'],
-        lda: train_data['lda1000'],
+        label2: train_data['label2'],
+        lda1000: train_data['lda1000'],
+        lda2000: train_data['lda2000'],
+        lda5000: train_data['lda5000'],
         global_step: step
       }
   
@@ -114,8 +125,10 @@ def main():
   
         test_data = readdata.read_testdata_batch_ansyc()
         feed_dict = {
-          label: test_data['label1'],
-          lda: test_data['lda1000'],
+          label2: test_data['label2'],
+          lda1000: test_data['lda1000'],
+          lda2000: test_data['lda2000'],
+          lda5000: test_data['lda5000'],
           global_step: step
         }
   
