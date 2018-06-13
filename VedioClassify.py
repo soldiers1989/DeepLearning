@@ -19,7 +19,7 @@ if not Py3: import codecs
 
 param = {
   'inputpath': 'data/',
-  'modelpath': 'model2/',
+  'modelpath': 'model/',
   'dataset': ['cdatabizuinpic', 'cdatabizuinpic'],
   'testset': ['cdatabizuinpic'],
   'predset': [],
@@ -35,7 +35,7 @@ param = {
 }
 
 param2 = {
-  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classify3/data/',
+  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classify3/data',
   'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classify3/model/',
 
   'dataset': ['train0', 'train1', 'train2', 'train3', 'train4',
@@ -66,7 +66,6 @@ class VedioClassify():
     self.input_dim = 1000
     self.input_dim2 = 2000
     self.input_dim5 = 5000
-    self.input_pic = 512
     self.output_dim = 28
     self.output_dim2 = 174
     self.mid_dim = 256
@@ -81,7 +80,6 @@ class VedioClassify():
       self.lda5000 = tf.placeholder(dtype='float', shape=[None, self.input_dim5], name='input_lda5000')
       self.bizclass1 = tf.placeholder(dtype='float', shape=[None, self.output_dim], name='input_bizclass1')
       self.bizclass2 = tf.placeholder(dtype='float', shape=[None, self.output_dim2], name='input_bizclass2')
-      self.pic500 = tf.placeholder(dtype='float', shape=[None, self.input_pic], name='input_pic500')
       self.label1 = tf.placeholder(dtype='float', shape=[None, self.output_dim], name='input_label1')
       self.label2 = tf.placeholder(dtype='float', shape=[None, self.output_dim2], name='input_labe2')
 
@@ -91,11 +89,11 @@ class VedioClassify():
 
     ##----------------------------concat layer
     with tf.name_scope('concat') as scope:
-      self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2, self.pic500], 1)
+      self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2], 1)
 
     ##----------------------------fc layer
     with tf.name_scope('fc') as scope:
-      level1_dim = self.input_dim + self.input_dim2 + self.input_dim5 + self.output_dim + self.output_dim2 + self.input_pic
+      level1_dim = self.input_dim + self.input_dim2 + self.input_dim5 + self.output_dim + self.output_dim2
       self.fc1_w0, self.fc1_b0 = TFBCUtils.create_w_b(level1_dim, self.mid_dim, w_name="fc1_w0", b_name="fc1_b0")
       self.fc21_w0, self.fc21_b0 = TFBCUtils.create_w_b(self.mid_dim, self.output_dim, w_name="fc21_w0",
                                                         b_name="fc21_b0")
@@ -149,7 +147,6 @@ class VedioClassify():
           self.lda1000: train_data['lda1000'],
           self.lda2000: train_data['lda2000'],
           self.lda5000: train_data['lda5000'],
-          self.pic500: train_data['pic500'],
           self.bizclass1: train_data['bizclass1'],
           self.bizclass2: train_data['bizclass2'],
           self.global_step: step
@@ -179,7 +176,6 @@ class VedioClassify():
             self.lda1000: test_data['lda1000'],
             self.lda2000: test_data['lda2000'],
             self.lda5000: test_data['lda5000'],
-            self.pic500: test_data['pic500'],
             self.bizclass1: test_data['bizclass1'],
             self.bizclass2: test_data['bizclass2'],
             self.global_step: step
@@ -222,7 +218,6 @@ class VedioClassify():
           self.lda1000: predata['lda1000'],
           self.lda2000: predata['lda2000'],
           self.lda5000: predata['lda5000'],
-          self.pic500: predata['pic500'],
           self.bizclass1: predata['bizclass1'],
           self.bizclass2: predata['bizclass2'],
           self.global_step: 0
@@ -262,9 +257,9 @@ def parse_args():
                       help='Input data path.')
   parser.add_argument('--predset', nargs='+', default=['cdatabizuinpic'],
                       help='Choose a pred dataset.')
-  parser.add_argument('--predoutputfile', nargs='?', default='vedio2.pred',
+  parser.add_argument('--predoutputfile', nargs='?', default='vedio.pred',
                       help='Choose a pred dataset.')
-  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model2\\dnn-model-20180613164139-500',
+  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\dnn-model-20180613143500-500',
                       help='Path to save the model.')
 
   return parser.parse_args()

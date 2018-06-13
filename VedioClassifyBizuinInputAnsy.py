@@ -269,96 +269,6 @@ class VedioClassifyBizuinInputAnsy(object):
     self.level1_size=28
     self.level2_size=174
 
-  def parseLDAArray(self, line, topicnum):
-    data = [item.strip().split(':') for item in line.strip().split('#')]
-    norm = sum([float(item[1]) for item in data])
-    ret = np.zeros(topicnum)
-    for item in data:
-      ret[int(item[0])]=float(item[1]) /norm
-    return ret
-
-  def parseBizClass(self, line, biznum, label):
-    ret = np.zeros(biznum)
-    if line=='NULL': return ret
-
-    data = [item.strip().split(':') for item in line.strip().split('#')]
-    for item in data:
-      key=int(item[0])
-      ret[key] = float(item[1])-1 if key==int(label) else float(item[1])
-    norm = sum(ret)
-    if norm>5: ret=ret/norm
-    else: ret = np.zeros(biznum)
-    return ret
-    
-#  def parseBizClass(self, line, biznum, label):
-#    ret = np.zeros(biznum)
-#    if line=='NULL': return ret
-#  
-#    data = [item.strip().split(':') for item in line.strip().split('#')]
-#    for item in data:
-#      key=int(item[0])
-#      ret[key] = float(item[1])-1 if key==int(label) else float(item[1])
-#    norm = sum(ret)
-#    if norm>0: ret=ret/norm
-#    return ret
-#         
-#  def parseBizClass(self, line, biznum, label):
-#    ret = np.zeros(biznum)
-#    if line=='NULL': return ret
-#
-#    data = [item.strip().split(':') for item in line.strip().split('#')]
-#    for item in data:
-#      key=int(item[0])
-#      value=int(item[1])
-#      if key==int(label): value=value-1
-#      if value>10: value=10
-#      ret[key]=1.0*value/10
-#    return ret
-
-  def parseLable(self, line, labelnum):
-    ret = np.zeros(labelnum)
-    ret[int(line)] = 1.0
-    return ret
-
-  def processing_batch(self, lines):
-#SELECT concat(lda1000, '|', lda2000, '|', lda5000, '|',
-#              bizuinclass1, '|', bizuinclass2, '|',
-#              firstorder, '|', secondorder, '|',
-#              vid, '_', title, '_', vtitle, '_', class_name_1,'_',class_name_2)
-#FROM tmp_kyk_vid_bizmsg_pub_train_data_lda_train_biz
-#WHERE r1>0.8
-    label1 = []
-    label2 = []
-    lda1000 = []
-    lda2000 = []
-    lda5000 = []
-    bizclass1 = []
-    bizclass2 = []
-    addinfo = []
-
-    for line in lines:
-      fields = line.strip().split('|')
-      if len(fields) < 7 : continue
-
-      lda1000.append(self.parseLDAArray(fields[0], 1000))
-      lda2000.append(self.parseLDAArray(fields[1], 2000))
-      lda5000.append(self.parseLDAArray(fields[2], 5000))
-      bizclass1.append(self.parseBizClass(fields[3], self.level1_size, fields[5]))
-      bizclass2.append(self.parseBizClass(fields[4], self.level2_size, fields[6]))
-      label1.append(self.parseLable(fields[5], self.level1_size))
-      label2.append(self.parseLable(fields[6], self.level2_size))
-      addinfo.append(fields[7])
-
-    return {'L'      : len(label1) if len(label1)==len(addinfo) else 0,
-            'label1' : label1,
-            'label2' : label2,
-            'lda1000': lda1000,
-            'lda2000': lda2000,
-            'lda5000': lda5000,
-            'bizclass1': bizclass1,
-            'bizclass2': bizclass2,
-            'addinfo': addinfo }
-
   def read_traindata_batch(self, size=32):
     with self.readlock:
       lines = self.traindata.read_batch(size)
@@ -449,6 +359,131 @@ class VedioClassifyBizuinInputAnsy(object):
   def read_testdata_batch_ansyc(self):
     return self.testdataqueue.get()
 
+  def has_predset(self):
+    return len(self.predset) > 0
+
+  def reset_predset(self):
+    self.preddata = TxtFilesRandomReader(files=self.predset, shuffleFile=False, shuffleRecord=False,
+                                         epochs=1)
+
+#  def parseBizClass(self, line, biznum, label):
+#    ret = np.zeros(biznum)
+#    if line=='NULL': return ret
+#  
+#    data = [item.strip().split(':') for item in line.strip().split('#')]
+#    for item in data:
+#      key=int(item[0])
+#      ret[key] = float(item[1])-1 if key==int(label) else float(item[1])
+#    norm = sum(ret)
+#    if norm>0: ret=ret/norm
+#    return ret
+#         
+#  def parseBizClass(self, line, biznum, label):
+#    ret = np.zeros(biznum)
+#    if line=='NULL': return ret
+#
+#    data = [item.strip().split(':') for item in line.strip().split('#')]
+#    for item in data:
+#      key=int(item[0])
+#      value=int(item[1])
+#      if key==int(label): value=value-1
+#      if value>10: value=10
+#      ret[key]=1.0*value/10
+#    return ret
+
+  def parseBizClass(self, line, biznum, label):
+    ret = np.zeros(biznum)
+    if line=='NULL' or line=='': return ret
+
+    data = [item.strip().split(':') for item in line.strip().split('#')]
+    for item in data:
+      key=int(item[0])
+      ret[key] = float(item[1])-1 if key==int(label) else float(item[1])
+    norm = sum(ret)
+    if norm>5: ret=ret/norm
+    else: ret = np.zeros(biznum)
+    return ret
+
+  def parseSharpList(self, line, fnum=512):
+    try:
+      data = np.array([float(item) for item in line.strip().split('#')])
+      data = data/sum(data)
+      return data
+    except Exception:
+      return [0.0]*fnum
+    
+  def parseLDAArray(self, line, topicnum):
+    data = [item.strip().split(':') for item in line.strip().split('#')]
+    norm = sum([float(item[1]) for item in data])
+    ret = np.zeros(topicnum)
+    for item in data:
+      ret[int(item[0])]=float(item[1]) /norm
+    return ret
+    
+  def parseLable(self, line, labelnum):
+    ret = np.zeros(labelnum)
+    ret[int(line)] = 1.0
+    return ret
+
+#SELECT concat(lda1000, '|', lda2000, '|', lda5000, '|', 
+#              bizuinclass1, '|', bizuinclass2, '|', picvector, '|', 
+#              firstorder, '|', secondorder, '|', 
+#              vid, '_', bizuin, '_', mid, '_', idx, '_', title, '_', vtitle, '_', nickname)
+#FROM
+#(              
+#  SELECT IF(lda1000 IS NULL, '', lda1000) AS lda1000,
+#         IF(lda2000 IS NULL, '', lda2000) AS lda2000,
+#         IF(lda5000 IS NULL, '', lda5000) AS lda5000,
+#         IF(bizuinclass1 IS NULL, '', bizuinclass1) AS bizuinclass1, 
+#         IF(bizuinclass2 IS NULL, '', bizuinclass2) AS bizuinclass2, 
+#         IF(picvector IS NULL, '', picvector) AS picvector, 
+#         firstorder, secondorder, vid, bizuin, mid, idx, 
+#         IF(title IS NULL, '', title) AS title, 
+#         IF(vtitle IS NULL, '', vtitle) AS vtitle, 
+#         IF(nickname IS NULL, '', vtitle) AS nickname
+#  FROM wxbiz_offline_db::tmp_kyk_vid_bizmsg_pub_train_data_lda_train_biz_pic 
+#  WHERE r<0.2
+#)
+  def processing_batch(self, lines, pred=False):
+    label1 = []
+    label2 = []
+    lda1000 = []
+    lda2000 = []
+    lda5000 = []
+    pic500 = []
+    bizclass1 = []
+    bizclass2 = []
+    addinfo = []
+
+    for line in lines:
+      fields = line.strip().split('|')
+      if len(fields) < 8 : continue
+
+      lda1000.append(self.parseLDAArray(fields[0], 1000))
+      lda2000.append(self.parseLDAArray(fields[1], 2000))
+      lda5000.append(self.parseLDAArray(fields[2], 5000))
+      if pred:
+        bizclass1.append(self.parseBizClass(fields[3], self.level1_size, '10000'))
+        bizclass2.append(self.parseBizClass(fields[4], self.level2_size, '10000'))        
+      else:
+        bizclass1.append(self.parseBizClass(fields[3], self.level1_size, fields[6]))
+        bizclass2.append(self.parseBizClass(fields[4], self.level2_size, fields[7]))
+      pic500.append(self.parseSharpList(fields[5]))
+      label1.append(self.parseLable(fields[6], self.level1_size))
+      label2.append(self.parseLable(fields[7], self.level2_size))
+      addinfo.append(fields[8])
+
+    return {'L'      : len(label1) if len(label1)==len(addinfo) else 0,
+            'label1' : label1,
+            'label2' : label2,
+            'lda1000': lda1000,
+            'lda2000': lda2000,
+            'lda5000': lda5000,
+            'pic500': pic500,
+            'bizclass1': bizclass1,
+            'bizclass2': bizclass2,
+            'addinfo': addinfo }
+                                         
   def read_preddata_batch(self, size=256):
     lda1000 = []
     lda2000 = []
@@ -458,40 +493,25 @@ class VedioClassifyBizuinInputAnsy(object):
     addinfo = []
 
     lines = self.preddata.read_batch(size)
-    for line in lines:
-      fields = line.strip().split('|')
-      if len(fields) < 7 : continue
-
-      lda1000.append(self.parseLDAArray(fields[0], 1000))
-      lda2000.append(self.parseLDAArray(fields[1], 2000))
-      lda5000.append(self.parseLDAArray(fields[2], 5000))
-      bizclass1.append(self.parseBizClass(fields[3], self.level1_size, '10000'))
-      bizclass2.append(self.parseBizClass(fields[4], self.level2_size, '10000'))
-      addinfo.append(fields[7])
-
-    return {'L'      : len(lda1000) if len(lda1000)==len(addinfo) else 0,
-            'lda1000': lda1000,
-            'lda2000': lda2000,
-            'lda5000': lda5000,
-            'bizclass1': bizclass1,
-            'bizclass2': bizclass2,
-            'addinfo': addinfo }
-
-  def has_predset(self):
-    return len(self.predset) > 0
-
-  def reset_predset(self):
-    self.preddata = TxtFilesRandomReader(files=self.predset, shuffleFile=False, shuffleRecord=False,
-                                         epochs=1)
-
-  def parse_data(self, line):
-    fields = line.strip().split()
-    label = int(fields[0])
-
-    feaures = [(item.split(':')) for item in fields[1:]]
-    feaures = sorted(filter(lambda x: x[1] != 0, [(int(item[0]), float(item[1])) for item in feaures]),
-                     key=lambda a: a[0])
-    return label, feaures
+    return self.processing_batch(lines)
+#    for line in lines:
+#      fields = line.strip().split('|')
+#      if len(fields) < 7 : continue
+#
+#      lda1000.append(self.parseLDAArray(fields[0], 1000))
+#      lda2000.append(self.parseLDAArray(fields[1], 2000))
+#      lda5000.append(self.parseLDAArray(fields[2], 5000))
+#      bizclass1.append(self.parseBizClass(fields[3], self.level1_size, '10000'))
+#      bizclass2.append(self.parseBizClass(fields[4], self.level2_size, '10000'))
+#      addinfo.append(fields[7])
+#
+#    return {'L'      : len(lda1000) if len(lda1000)==len(addinfo) else 0,
+#            'lda1000': lda1000,
+#            'lda2000': lda2000,
+#            'lda5000': lda5000,
+#            'bizclass1': bizclass1,
+#            'bizclass2': bizclass2,
+#            'addinfo': addinfo }
 
 def str2bool(v):
   if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -506,11 +526,11 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Run Reindex.")
   parser.add_argument('--inputpath', default='data/', required=False,
                       help='Input data path.')
-  parser.add_argument('--dataset', nargs='+', default=['cdatabizuin'],
+  parser.add_argument('--dataset', nargs='+', default=['cdatabizuinpic'],
                       help='Choose a train dataset.')
-  parser.add_argument('--testset', nargs='*', default=['cdatabizuin'],
+  parser.add_argument('--testset', nargs='*', default=['cdatabizuinpic'],
                       help='Choose a test dataset.')
-  parser.add_argument('--predset', nargs='*', default=['cdatabizuin'],
+  parser.add_argument('--predset', nargs='*', default=['cdatabizuinpic'],
                       help='Choose a pred dataset.')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
