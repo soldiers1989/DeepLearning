@@ -20,8 +20,8 @@ if not Py3: import codecs
 param = {
   'inputpath': 'data/',
   'modelpath': 'model/',
-  'dataset': ['cdatabizuin', 'cdatabizuin'],
-  'testset': ['cdatabizuin'],
+  'dataset': ['cdatabizuinpic', 'cdatabizuinpic'],
+  'testset': ['cdatabizuinpic'],
   'predset': [],
 
   'shuffle_file': True,
@@ -35,12 +35,12 @@ param = {
 }
 
 param2 = {
-  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classify2/data',
-  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classify2/model/',
+  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classify3/data',
+  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classify3/model/',
 
-  'dataset': ['train0.c', 'train1.c', 'train2.c', 'train3.c', 'train4.c',
-              'train5.c', 'train6.c', 'train7.c', 'train8.c', 'train9.c'],
-  'testset': ['t000000.c', 't000001.c'],
+  'dataset': ['train0', 'train1', 'train2', 'train3', 'train4',
+              'train5', 'train6', 'train7', 'train8', 'train9'],
+  'testset': ['test1', 'test2', 'test3'],
   'predset': [],
 
   'shuffle_file': True,
@@ -68,7 +68,7 @@ class VedioClassify():
     self.input_dim5 = 5000
     self.output_dim = 28
     self.output_dim2 = 174
-    self.mid_dim = 174 * 2
+    self.mid_dim = 256
 
     self._init_graph()
 
@@ -116,7 +116,7 @@ class VedioClassify():
       self.cross_weight2 = tf.constant(0.8, dtype='float')
       self.cross_entropy = self.cross_weight1 * self.cross_entropy1 + self.cross_weight2 * self.cross_entropy2
 
-      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, param['decay_steps'], 0.98)
+      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
 
     ##----------------------------acc compute
@@ -137,7 +137,7 @@ class VedioClassify():
       self.saver = tf.train.Saver()
       step = 0
 
-      for step in range(param['total_batch']):
+      for step in range(self.args['total_batch']):
         train_data = readdata.read_traindata_batch_ansyc()
 
         ## feed data to tf session
@@ -152,7 +152,7 @@ class VedioClassify():
           self.global_step: step
         }
 
-        if (step > 0 and step % param['test_batch'] == 0):
+        if (step > 0 and step % self.args['test_batch'] == 0):
           ## run optimizer
           _, l, cl1, cl2, lr, pa1, la1, pa2, la2, acc1, acc2 = session.run([self.optimizer, \
                                                                             self.cross_entropy, self.cross_entropy1,
@@ -198,16 +198,18 @@ class VedioClassify():
           ## run optimizer
           _, l = session.run([self.optimizer, self.cross_entropy], feed_dict=feed_dict)
 
-        if (step > 0 and step % param['save_batch'] == 0):
+        if (step > 0 and step % self.args['save_batch'] == 0):
           model_name = "dnn-model-" + self.timestamp + '-' + str(step)
-          if not os.path.exists(param['modelpath']):
-            os.mkdir(param['modelpath'])
-          self.saver.save(session, os.path.join(param['modelpath'], model_name))
+          if not os.path.exists(self.args['modelpath']):
+            os.mkdir(self.args['modelpath'])
+          self.saver.save(session, os.path.join(self.args['modelpath'], model_name))
 
   def infer(self, readdata, outf):
     with tf.Session() as sess:
       self.saver = tf.train.Saver()
-      self.saver.restore(sess, tf.train.latest_checkpoint(param['ckpt']))
+      print('Loading model:'+self.args['ckpt'])
+      #self.saver.restore(sess, tf.train.latest_checkpoint(self.args['ckpt']))
+      self.saver.restore(sess, self.args['ckpt'])
 
       predata = readdata.read_preddata_batch()
 
@@ -253,34 +255,37 @@ def parse_args():
                       help='Using pred function.')
   parser.add_argument('--inputpath', nargs='?', default='data/',
                       help='Input data path.')
-  parser.add_argument('--predset', nargs='+', default=['cdatabizuin'],
+  parser.add_argument('--predset', nargs='+', default=['cdatabizuinpic'],
                       help='Choose a pred dataset.')
   parser.add_argument('--predoutputfile', nargs='?', default='vedio.pred',
                       help='Choose a pred dataset.')
-  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\',
+  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\dnn-model-20180613143500-500',
                       help='Path to save the model.')
 
   return parser.parse_args()
 
-
 if __name__ == "__main__":
+  args = parse_args()
+  
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
-
-  args = parse_args()
 
   if args.pred:
     param.update(vars(args))
     model = VedioClassify(param)
 
     readdata = VedioClassifyBizuinInputAnsy(param)
-    outfname = param['inputpath'] + '/' + param['predoutputfile']
+    outfname = args.inputpath + os.sep + args.predoutputfile
 
     if Py3:
       with open(outfname, 'w', encoding="utf-8") as outf:
         model.infer(readdata, outf)
     else:
+      import sys
+      reload(sys)
+      sys.setdefaultencoding("utf-8")
       with codecs.open(outfname, 'w', encoding='utf-8') as outf:
+        print('Using codecs.open')
         model.infer(readdata, outf)
 
   else:

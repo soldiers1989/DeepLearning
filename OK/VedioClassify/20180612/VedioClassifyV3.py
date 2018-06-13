@@ -3,11 +3,12 @@
 
 from __future__ import print_function
 
-import os
-import time
-import datetime
-import sys
 import argparse
+import datetime
+import os
+import sys
+import time
+
 import TFBCUtils
 import numpy as np
 import tensorflow as tf
@@ -115,7 +116,7 @@ class VedioClassify():
       self.cross_weight2 = tf.constant(0.8, dtype='float')
       self.cross_entropy = self.cross_weight1 * self.cross_entropy1 + self.cross_weight2 * self.cross_entropy2
 
-      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, param['decay_steps'], 0.98)
+      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
 
     ##----------------------------acc compute
@@ -136,7 +137,7 @@ class VedioClassify():
       self.saver = tf.train.Saver()
       step = 0
 
-      for step in range(param['total_batch']):
+      for step in range(self.args['total_batch']):
         train_data = readdata.read_traindata_batch_ansyc()
 
         ## feed data to tf session
@@ -151,7 +152,7 @@ class VedioClassify():
           self.global_step: step
         }
 
-        if (step > 0 and step % param['test_batch'] == 0):
+        if (step > 0 and step % self.args['test_batch'] == 0):
           ## run optimizer
           _, l, cl1, cl2, lr, pa1, la1, pa2, la2, acc1, acc2 = session.run([self.optimizer, \
                                                                             self.cross_entropy, self.cross_entropy1,
@@ -197,16 +198,17 @@ class VedioClassify():
           ## run optimizer
           _, l = session.run([self.optimizer, self.cross_entropy], feed_dict=feed_dict)
 
-        if (step > 0 and step % param['save_batch'] == 0):
+        if (step > 0 and step % self.args['save_batch'] == 0):
           model_name = "dnn-model-" + self.timestamp + '-' + str(step)
-          if not os.path.exists(param['modelpath']):
-            os.mkdir(param['modelpath'])
-          self.saver.save(session, os.path.join(param['modelpath'], model_name))
+          if not os.path.exists(self.args['modelpath']):
+            os.mkdir(self.args['modelpath'])
+          self.saver.save(session, os.path.join(self.args['modelpath'], model_name))
 
   def infer(self, readdata, outf):
     with tf.Session() as sess:
       self.saver = tf.train.Saver()
-      self.saver.restore(sess, tf.train.latest_checkpoint(param['ckpt']))
+      print('Loading model:'+self.args['ckpt'])
+      self.saver.restore(sess, tf.train.latest_checkpoint(self.args['ckpt']))
 
       predata = readdata.read_preddata_batch()
 
@@ -272,7 +274,7 @@ if __name__ == "__main__":
     model = VedioClassify(param)
 
     readdata = VedioClassifyBizuinInputAnsy(param)
-    outfname = param['inputpath'] + '/' + param['predoutputfile']
+    outfname = args.inputpath + '/' + args.predoutputfile
 
     if Py3:
       with open(outfname, 'w', encoding="utf-8") as outf:

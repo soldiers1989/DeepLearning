@@ -6,11 +6,10 @@ from __future__ import print_function
 import os
 import time
 
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyInputAnsy import VedioDSSMInputAnsy
-
-import TFBCUtils
 
 param = {
   'inputpath': 'data/',

@@ -6,11 +6,10 @@ from __future__ import print_function
 import os
 import time
 
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyInputAnsy import VedioClassifyInputAnsy
-
-import TFBCUtils
 
 param = {
   'inputpath': 'data/',
@@ -86,7 +85,7 @@ def main():
 #    fc2_w0 = tf.Variable(tf.zeros([input_dim+input_dim2+input_dim5, output_dim2]), name='fc_w0')  
 #    fc2_b0 = tf.Variable(tf.zeros([output_dim2]), name='fc_b0') 
     
-    fc1_w0, fc1_b0 = TFBCUtils.create_w_b(input_dim+input_dim2+input_dim5, mid_dim, w_name="fc1_w0", b_name="fc1_b0")
+    fc1_w0, fc1_b0 = TFBCUtils.create_w_b(input_dim + input_dim2 + input_dim5, mid_dim, w_name="fc1_w0", b_name="fc1_b0")
     fc21_w0, fc21_b0 = TFBCUtils.create_w_b(mid_dim, output_dim, w_name="fc21_w0", b_name="fc21_b0")
     fc22_w0, fc22_b0 = TFBCUtils.create_w_b(mid_dim, output_dim2, w_name="fc22_w0", b_name="fc22_b0")
     
