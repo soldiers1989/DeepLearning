@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-import os
-import pickle
-import random
-import datetime
-import threading
-import codecs
-import numpy as np
 import argparse
-from itertools import product
+import codecs
+import datetime
+import os
+import random
+import sys
+import threading
 from itertools import islice
+
+import numpy as np
+from TFBCUtils import Vocab
+
 Py3 = sys.version_info[0] == 3
 if Py3:
   from queue import Queue
@@ -218,15 +219,18 @@ class TxtFilesRandomReader(object):
     self.lines = self.lines[size:]
     return ret
 
-class VedioClassifyBizuinInputAnsy(object):
+class VedioClassifyBizuinInputAnsyEmb(object):
   def __init__(self, inputargs):
-    self.args = inputargs
+    self.args = inputargs    
+    print('VedioClassifyBizuinInputAnsyEmb:', str(self.args))
     self.inputpath = inputargs['inputpath']
+    if not self.inputpath.endswith(''):
+      self.inputpath+=os.sep
 
     self.dataset = []
     self.testset = []
     self.predset = []
-
+    
     if Py3:
       if 'dataset' in inputargs:
         self.dataset = [self.inputpath + item for item in inputargs['dataset']]
@@ -252,6 +256,10 @@ class VedioClassifyBizuinInputAnsy(object):
     self.batch_size = inputargs.get('batch_size', 0)
     self.batch_size_test = inputargs.get('batch_size_test', self.batch_size * 2)
 
+    self.vocab = Vocab(inputargs['vocab'], inputargs['emb_size'], inputargs['vocab_size'])
+    self.titlemaxsize = 20
+    self.articlemaxsize = 200
+    
     self.traindata = TxtFilesConcurrentRandomReaderV2(inputargs)
 
     self.testdata = TxtFilesRandomReader(files=self.testset, shuffleFile=inputargs.get('shuffle_file', False) )
@@ -366,31 +374,6 @@ class VedioClassifyBizuinInputAnsy(object):
     self.preddata = TxtFilesRandomReader(files=self.predset, shuffleFile=False, shuffleRecord=False,
                                          epochs=1)
 
-#  def parseBizClass(self, line, biznum, label):
-#    ret = np.zeros(biznum)
-#    if line=='NULL': return ret
-#  
-#    data = [item.strip().split(':') for item in line.strip().split('#')]
-#    for item in data:
-#      key=int(item[0])
-#      ret[key] = float(item[1])-1 if key==int(label) else float(item[1])
-#    norm = sum(ret)
-#    if norm>0: ret=ret/norm
-#    return ret
-#         
-#  def parseBizClass(self, line, biznum, label):
-#    ret = np.zeros(biznum)
-#    if line=='NULL': return ret
-#
-#    data = [item.strip().split(':') for item in line.strip().split('#')]
-#    for item in data:
-#      key=int(item[0])
-#      value=int(item[1])
-#      if key==int(label): value=value-1
-#      if value>10: value=10
-#      ret[key]=1.0*value/10
-#    return ret
-
   def parseBizClass(self, line, biznum, label):
     ret = np.zeros(biznum)
     if line=='NULL' or line=='': return ret
@@ -403,14 +386,6 @@ class VedioClassifyBizuinInputAnsy(object):
     if norm>5: ret=ret/norm
     else: ret = np.zeros(biznum)
     return ret
-
-  def parseSharpList(self, line, fnum=512):
-    try:
-      data = np.array([float(item) for item in line.strip().split('#')])
-      data = data/sum(data)
-      return data
-    except Exception:
-      return [0.0]*fnum
     
   def parseLDAArray(self, line, topicnum):
     data = [item.strip().split(':') for item in line.strip().split('#')]
@@ -420,98 +395,69 @@ class VedioClassifyBizuinInputAnsy(object):
       ret[int(item[0])]=float(item[1]) /norm
     return ret
     
+  def parseVocab(self, line, maxsize):    
+    ret = self.vocab.string2id([item for item in line.strip().split(' ')])
+    if(len(ret)<maxsize): ret.extend( [0]*(maxsize-len(ret)) )
+    return np.array(ret[:maxsize])
+    
   def parseLable(self, line, labelnum):
     ret = np.zeros(labelnum)
     ret[int(line)] = 1.0
     return ret
 
-#SELECT concat(lda1000, '|', lda2000, '|', lda5000, '|', 
-#              bizuinclass1, '|', bizuinclass2, '|', picvector, '|', 
-#              firstorder, '|', secondorder, '|', 
-#              vid, '_', bizuin, '_', mid, '_', idx, '_', title, '_', vtitle, '_', nickname)
-#FROM
-#(              
-#  SELECT IF(lda1000 IS NULL, '', lda1000) AS lda1000,
-#         IF(lda2000 IS NULL, '', lda2000) AS lda2000,
-#         IF(lda5000 IS NULL, '', lda5000) AS lda5000,
-#         IF(bizuinclass1 IS NULL, '', bizuinclass1) AS bizuinclass1, 
-#         IF(bizuinclass2 IS NULL, '', bizuinclass2) AS bizuinclass2, 
-#         IF(picvector IS NULL, '', picvector) AS picvector, 
-#         firstorder, secondorder, vid, bizuin, mid, idx, 
-#         IF(title IS NULL, '', title) AS title, 
-#         IF(vtitle IS NULL, '', vtitle) AS vtitle, 
-#         IF(nickname IS NULL, '', vtitle) AS nickname
-#  FROM wxbiz_offline_db::tmp_kyk_vid_bizmsg_pub_train_data_lda_train_biz_pic 
-#  WHERE r<0.2
-#)
+#SELECT concat( regexp_replace(concat(vid, '_', bizuin, '_', mid, '_', idx, '_', title, '_', vtitle, '_', nickname), '\\|', ''), '|',
+#               lda1000, '|', lda2000, '|', lda5000, '|', 
+#               bizuinclass1, '|', bizuinclass2, '|', 
+#               regexp_replace(titleseg, '\\|', ''), '|', 
+#               regexp_replace(vtitleseg, '\\|', ''), '|', 
+#               regexp_replace(contentseg, '\\|', ''), '|', 
+#               firstorder, '|', secondorder)
   def processing_batch(self, lines, pred=False):
+    addinfo = []
     label1 = []
     label2 = []
     lda1000 = []
     lda2000 = []
     lda5000 = []
-    pic500 = []
+    titleseg = []
+    vtitleseg = []
+    contentseg = []
     bizclass1 = []
     bizclass2 = []
-    addinfo = []
 
     for line in lines:
       fields = line.strip().split('|')
-      if len(fields) < 8 : continue
+      if len(fields) < 11 : continue
 
-      lda1000.append(self.parseLDAArray(fields[0], 1000))
-      lda2000.append(self.parseLDAArray(fields[1], 2000))
-      lda5000.append(self.parseLDAArray(fields[2], 5000))
+      addinfo.append(fields[0])
+      lda1000.append(self.parseLDAArray(fields[1], 1000))
+      lda2000.append(self.parseLDAArray(fields[2], 2000))
+      lda5000.append(self.parseLDAArray(fields[3], 5000))
       if pred:
-        bizclass1.append(self.parseBizClass(fields[3], self.level1_size, '10000'))
-        bizclass2.append(self.parseBizClass(fields[4], self.level2_size, '10000'))        
+        bizclass1.append(self.parseBizClass(fields[4], self.level1_size, '10000'))
+        bizclass2.append(self.parseBizClass(fields[5], self.level2_size, '10000'))        
       else:
-        bizclass1.append(self.parseBizClass(fields[3], self.level1_size, fields[6]))
-        bizclass2.append(self.parseBizClass(fields[4], self.level2_size, fields[7]))
-      pic500.append(self.parseSharpList(fields[5]))
-      label1.append(self.parseLable(fields[6], self.level1_size))
-      label2.append(self.parseLable(fields[7], self.level2_size))
-      addinfo.append(fields[8])
+        bizclass1.append(self.parseBizClass(fields[4], self.level1_size, fields[9]))
+        bizclass2.append(self.parseBizClass(fields[5], self.level2_size, fields[10]))
+      
+      titleseg.append(self.parseVocab(fields[6], self.titlemaxsize))
+      vtitleseg.append(self.parseVocab(fields[7], self.titlemaxsize))
+      contentseg.append(self.parseVocab(fields[8], self.articlemaxsize))
+      
+      label1.append(self.parseLable(fields[9], self.level1_size))
+      label2.append(self.parseLable(fields[10], self.level2_size))
+      
 
-    return {'L'      : len(label1) if len(label1)==len(addinfo) else 0,
-            'label1' : label1,
-            'label2' : label2,
-            'lda1000': lda1000,
-            'lda2000': lda2000,
-            'lda5000': lda5000,
-            'pic500': pic500,
-            'bizclass1': bizclass1,
-            'bizclass2': bizclass2,
+    return {'L': len(label1) if len(label1)==len(addinfo) else 0,
+            'label1': label1, 'label2' : label2,
+            'lda1000': lda1000, 'lda2000': lda2000, 'lda5000': lda5000,
+            'bizclass1': bizclass1, 'bizclass2': bizclass2,
+            'titleseg': titleseg, 'vtitleseg': vtitleseg, 'contentseg': contentseg,
             'addinfo': addinfo }
                                          
   def read_preddata_batch(self, size=256):
-    lda1000 = []
-    lda2000 = []
-    lda5000 = []
-    bizclass1 = []
-    bizclass2 = []
-    addinfo = []
-
     lines = self.preddata.read_batch(size)
     return self.processing_batch(lines)
-#    for line in lines:
-#      fields = line.strip().split('|')
-#      if len(fields) < 7 : continue
-#
-#      lda1000.append(self.parseLDAArray(fields[0], 1000))
-#      lda2000.append(self.parseLDAArray(fields[1], 2000))
-#      lda5000.append(self.parseLDAArray(fields[2], 5000))
-#      bizclass1.append(self.parseBizClass(fields[3], self.level1_size, '10000'))
-#      bizclass2.append(self.parseBizClass(fields[4], self.level2_size, '10000'))
-#      addinfo.append(fields[7])
-#
-#    return {'L'      : len(lda1000) if len(lda1000)==len(addinfo) else 0,
-#            'lda1000': lda1000,
-#            'lda2000': lda2000,
-#            'lda5000': lda5000,
-#            'bizclass1': bizclass1,
-#            'bizclass2': bizclass2,
-#            'addinfo': addinfo }
 
 def str2bool(v):
   if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -526,11 +472,17 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Run Reindex.")
   parser.add_argument('--inputpath', default='data/', required=False,
                       help='Input data path.')
-  parser.add_argument('--dataset', nargs='+', default=['cdatabizuinpic'],
+  parser.add_argument('--vocab', default='data/model2.vec.proc', required=False,
+                      help='Vocab file path.')
+  parser.add_argument('--emb_size', type=int, default=100,
+                      help='Vocab file path.')
+  parser.add_argument('--vocab_size', type=int, default=0,
+                      help='Vocab size.')
+  parser.add_argument('--dataset', nargs='+', default=['VedioClassifyBizuinInputAnsyEbm'],
                       help='Choose a train dataset.')
-  parser.add_argument('--testset', nargs='*', default=['cdatabizuinpic'],
+  parser.add_argument('--testset', nargs='*', default=['VedioClassifyBizuinInputAnsyEbm'],
                       help='Choose a test dataset.')
-  parser.add_argument('--predset', nargs='*', default=['cdatabizuinpic'],
+  parser.add_argument('--predset', nargs='*', default=['VedioClassifyBizuinInputAnsyEbm'],
                       help='Choose a pred dataset.')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
@@ -540,9 +492,9 @@ if __name__ == '__main__':
                       help='Data batch size')
   args = parser.parse_args()
   print(vars(args))
-  readdata = VedioClassifyBizuinInputAnsy(vars(args))
+  readdata = VedioClassifyBizuinInputAnsyEmb(vars(args))
 
-  ret = readdata.read_preddata_batch(size=32)
+  ret = readdata.read_preddata_batch(size=1)
   if ret['L']>0:
     print(ret)
 

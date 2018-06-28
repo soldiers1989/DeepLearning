@@ -12,7 +12,7 @@ import time
 import TFBCUtils
 import numpy as np
 import tensorflow as tf
-from VedioClassifyBizuinInputAnsy import VedioClassifyBizuinInputAnsy
+from VedioClassifyBizuinInputAnsyEmb import VedioClassifyBizuinInputAnsyEmb
 
 Py3 = sys.version_info[0] == 3
 if not Py3: import codecs
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     param.update(vars(args))
     model = VedioClassify(param)
 
-    readdata = VedioClassifyBizuinInputAnsy(param)
+    readdata = VedioClassifyBizuinInputAnsyEmb(param)
     outfname = args.inputpath + os.sep + args.predoutputfile
 
     if Py3:
@@ -294,7 +294,7 @@ if __name__ == "__main__":
         model.infer(readdata, outf)
 
   else:
-    readdata = VedioClassifyBizuinInputAnsy(param)
+    readdata = VedioClassifyBizuinInputAnsyEmb(param)
     readdata.start_ansyc()
     model = VedioClassify(param)
     model.train(readdata)

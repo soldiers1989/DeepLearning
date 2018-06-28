@@ -10,7 +10,7 @@ import time
 import TFBCUtils
 import numpy as np
 import tensorflow as tf
-from VedioClassifyBizuinInputAnsy import VedioClassifyBizuinInputAnsy
+from VedioClassifyBizuinInputAnsyEmb import VedioClassifyBizuinInputAnsyEmb
 
 param = {
   'inputpath': 'data/',
@@ -200,7 +200,7 @@ if __name__ == "__main__":
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
 
-  readdata = VedioClassifyBizuinInputAnsy(param)
+  readdata = VedioClassifyBizuinInputAnsyEmb(param)
   readdata.start_ansyc()
   model = VedioClassify(param)
   model.train(readdata)
