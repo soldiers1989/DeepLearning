@@ -7,10 +7,11 @@ import datetime
 import os
 import time
 
-import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyBizuinInputAnsyEmb import VedioClassifyBizuinInputAnsyEmb
+
+import TFBCUtils
 
 param = {
   'inputpath': 'data/',

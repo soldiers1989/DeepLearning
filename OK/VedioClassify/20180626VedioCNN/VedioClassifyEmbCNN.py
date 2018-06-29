@@ -9,10 +9,11 @@ import os
 import sys
 import time
 
-import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyBizuinInputAnsyEmb import VedioClassifyBizuinInputAnsyEmb
+
+import TFBCUtils
 
 Py3 = sys.version_info[0] == 3
 if not Py3: import codecs
@@ -108,7 +109,7 @@ class VedioClassify():
       self.global_step = tf.placeholder(dtype=np.int32, name="global_step")
       
     ##----------------------------embedding layer
-    with tf.name_scope('embedding') as scope:
+    with tf.name_scope('embedding') as scope, with tf.device('/cpu:0'):
       self.embedding = TFBCUtils.addvocabembedding(self.vocab)
       
       self.titleembedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.titleseg), -1)
