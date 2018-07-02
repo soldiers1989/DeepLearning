@@ -32,6 +32,7 @@ param = {
   'test_batch': 100,
   'save_batch': 500,
   'total_batch': 1000,
+  'learning_rate': 0.001,
   'decay_steps': 1000,
   'keep_prob': 0.7,
 
@@ -55,27 +56,26 @@ param2 = {
   'dataset': ['train0', 'train1', 'train2', 'train3', 'train4',
               'train5', 'train6', 'train7', 'train8', 'train9',
               'train10', 'train11', 'train12', 'train13', 'train14'],
-  'testset': ['test0', 'test1', 'test2', 'test3', 'test4', 'test5', 'test6'],
+  'testset': ['test1', 'test2', 'test3', 'test4', 'test5', 'test6'],
   'predset': [],
 
-  'batch_size': 64,
+  'batch_size': 128,
   'batch_size_test': 1024,
   'test_batch': 1000,
   'save_batch': 5000,
-  'total_batch': 100000,
+  'total_batch': 1000000,
   'decay_steps': 5000,
   'keep_prob': 0.5,
 
   'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classfy4/w2v/model2.vec.proc',
   'vocab_size': 0,
-  'kernel_sizes': [2, 3, 4],
+  'kernel_sizes': [1, 2, 3, 4],
   'filters': 200,
 
   'num_sampled': 100
 }
 
-
-# param.update(param2)
+param.update(param2)
 
 class VedioClassify():
   def __init__(self, args, vocab):
@@ -191,7 +191,7 @@ class VedioClassify():
                                                 num_sampled=self.args['num_sampled'],
                                                 num_classes=self.args['tag_size']))
 
-      self.learning_rate = tf.train.exponential_decay(0.00015, self.global_step, self.args['decay_steps'], 0.98)
+      self.learning_rate = tf.train.exponential_decay(self.args['learning_rate'], self.global_step, self.args['decay_steps'], 0.98)
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
 
     ##----------------------------acc compute

@@ -11,7 +11,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-from VedioClassifyBizuinInputAnsyEmb import VedioClassifyBizuinInputAnsyEmb
+from VedioClassifyInputAnsyEmbRNN import VedioClassifyBizuinInputAnsyEmb
 
 import TFBCUtils
 
