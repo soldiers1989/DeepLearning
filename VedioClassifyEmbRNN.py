@@ -33,11 +33,11 @@ param = {
   'total_batch': 1000,
   'decay_steps': 1000,
   'keep_prob': 0.5,
-    
+
   'emb_size': 100,
   'titlemax_size': 20,
   'articlemax_size': 200,
-    
+
   'vocab': 'data/model2.vec.proc',
   'vocab_size': 1000,
   'kernel_sizes': [2, 3],
@@ -60,7 +60,7 @@ param2 = {
   'total_batch': 1000000,
   'decay_steps': 5000,
   'keep_prob': 0.5,
-    
+
   'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classfy4/w2v/model2.vec.proc',
   'vocab_size': 0,
   'kernel_sizes': [2, 3, 4],
@@ -76,7 +76,7 @@ class VedioClassifyEmbRNN():
     now = datetime.datetime.now()
     self.timestamp = now.strftime("%Y%m%d%H%M%S")
     print(self.args)
-    
+
     self.vocab=vocab
 
     self.input_dim = 1000
@@ -88,6 +88,33 @@ class VedioClassifyEmbRNN():
 
     self._init_graph()
 
+  def create_rnn(self, x, seqlen, seq_max_len, name):
+    with tf.name_scope(name) as scope:
+      with tf.variable_scope(name):
+        # 输入x的形状： (batch_size, max_seq_len, n_input) 输入seqlen的形状：(batch_size, )
+        # 定义一个lstm_cell，隐层的大小为n_hidden（之前的参数）
+        lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(self.args['emb_size'])
+
+        # 使用tf.nn.dynamic_rnn展开时间维度
+        # 此外sequence_length=seqlen也很重要，它告诉TensorFlow每一个序列应该运行多少步
+        outputs, states = tf.nn.dynamic_rnn(lstm_cell, x, dtype=tf.float32, sequence_length=seqlen)
+
+        # outputs的形状为(batch_size, max_seq_len, n_hidden)
+        # 我们希望的是取出与序列长度相对应的输出。如一个序列长度为10，我们就应该取出第10个输出
+        # 但是TensorFlow不支持直接对outputs进行索引，因此我们用下面的方法来做：
+
+        batch_size = tf.shape(outputs)[0]
+        # 得到每一个序列真正的index
+        # tf.range 创建一个数字序列
+        # tf.gather根据索引，从输入张量中依次取元素，构成一个新的张量。
+        #                       [0 1 2] * 20          + [ 9, 18, 19] - 1
+        index = tf.range(0, batch_size) * seq_max_len + (seqlen - 1)  # [ 8 37 58]
+        #                   tf.reshape(outputs, [-1, n_hidden])   size: (60, 64)  60=3*20
+        outputs = tf.gather(tf.reshape(outputs, [-1, self.args['emb_size']]), index)
+        # size: (3, 64) 取了60里的[ 8 37 58]
+
+        return outputs
+
   def _init_graph(self):
     ##----------------------------input
     with tf.name_scope('input') as scope:
@@ -96,64 +123,45 @@ class VedioClassifyEmbRNN():
       self.lda5000 = tf.placeholder(dtype='float', shape=[None, self.input_dim5], name='input_lda5000')
       self.bizclass1 = tf.placeholder(dtype='float', shape=[None, self.output_dim], name='input_bizclass1')
       self.bizclass2 = tf.placeholder(dtype='float', shape=[None, self.output_dim2], name='input_bizclass2')
-      
+
       self.titleseg = tf.placeholder(shape=[None, self.args['titlemax_size']], dtype=tf.int32, name='input_titleseg')
+      self.titlelen = tf.placeholder(shape=[None], dtype=tf.int32, name='input_titlelen')
       self.vtitleseg = tf.placeholder(shape=[None, self.args['titlemax_size']], dtype=tf.int32, name='input_vtitleseg')
+      self.vtitlelen = tf.placeholder(shape=[None], dtype=tf.int32, name='input_vtitlelen')
       self.contentseg = tf.placeholder(shape=[None, self.args['articlemax_size']], dtype=tf.int32, name='input_contentseg')
-      
+      self.contentlen = tf.placeholder(shape=[None], dtype=tf.int32, name='input_contentlen')
+
       self.label1 = tf.placeholder(dtype='float', shape=[None, self.output_dim], name='input_label1')
       self.label2 = tf.placeholder(dtype='float', shape=[None, self.output_dim2], name='input_labe2')
 
     with tf.name_scope('param') as scope:
       self.keep_prob = tf.placeholder(dtype="float", name='keep_prob')
       self.global_step = tf.placeholder(dtype=np.int32, name="global_step")
-      
+
     ##----------------------------embedding layer
     with tf.device('/cpu:0'):
       with tf.name_scope('embedding') as scope:
         self.embedding = TFBCUtils.addvocabembedding(self.vocab)
 
-        self.titleembedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.titleseg), -1)
-        self.vtitleembedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.vtitleseg), -1)
-        self.contentbedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.contentseg), -1)
+        self.titleembedding = tf.nn.embedding_lookup(self.embedding, self.titleseg)
+        self.vtitleembedding = tf.nn.embedding_lookup(self.embedding, self.vtitleseg)
+        self.contentbedding = tf.nn.embedding_lookup(self.embedding, self.contentseg)
 
-    ##----------------------------conv layer
-    with tf.name_scope('conv') as scope:
-      self.convparam=[]
-      self.convresult=[]
-      for kernel_sizes in self.args['kernel_sizes']:
-        cnn_w0 = tf.Variable(tf.random_uniform([kernel_sizes, self.args['emb_size'], 1, self.args['filters']], -0.2,0.2), 
-                             dtype='float32', name="cnn_%d_w0"%kernel_sizes)
-        cnn_b0 = tf.Variable(tf.constant(0.00001, shape=[self.args['filters']]), 
-                             name = "cnn_%d_b0"%kernel_sizes)
-        self.convparam.append((cnn_w0,cnn_b0))
-                             
-        titlecnn = tf.add(tf.nn.conv2d(self.titleembedding, cnn_w0, [1,1,1,1], padding='VALID'), cnn_b0)
-        titlecnn = tf.nn.relu(titlecnn)
-        titlemax = tf.nn.max_pool(titlecnn, [1, self.args['titlemax_size']-kernel_sizes+1,1,1], [1,1,1,1], padding='VALID')
-        titlemax = tf.squeeze(titlemax, [1, 2]) 
-
-        vtitlecnn = tf.add(tf.nn.conv2d(self.vtitleembedding, cnn_w0, [1,1,1,1], padding='VALID'), cnn_b0)
-        vtitlecnn = tf.nn.relu(vtitlecnn)
-        vtitlemax = tf.nn.max_pool(vtitlecnn, [1, self.args['titlemax_size']-kernel_sizes+1,1,1], [1,1,1,1], padding='VALID')
-        titlemax = tf.squeeze(vtitlemax, [1, 2]) 
-        
-        contentcnn = tf.add(tf.nn.conv2d(self.contentbedding, cnn_w0, [1,1,1,1], padding='VALID'), cnn_b0)
-        contentcnn = tf.nn.relu(contentcnn)
-        contentmax = tf.nn.max_pool(contentcnn, [1, self.args['articlemax_size']-kernel_sizes+1,1,1], [1,1,1,1], padding='VALID')
-        contentmax = tf.squeeze(contentmax, [1, 2]) 
-        
-        mergered = tf.concat([titlemax, titlemax, contentmax], 1)
-        self.convresult.append(mergered)
+    ##----------------------------rnn layer
+    self.titlernn = self.create_rnn(self.titleembedding, self.titlelen, self.args['titlemax_size'], 'titlernn')
+    self.vtitlernn = self.create_rnn(self.vtitleembedding, self.vtitlelen, self.args['titlemax_size'], 'vtitlernn')
+    self.contentrnn = self.create_rnn(self.contentbedding, self.contentlen, self.args['articlemax_size'], 'contentrnn')
 
     ##----------------------------concat layer
     with tf.name_scope('concat') as scope:
-      self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2] + self.convresult, 1)
+      #self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2] + self.convresult, 1)
+      self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000,
+          self.bizclass1, self.bizclass2, self.titlernn, self.vtitlernn, self.contentrnn], 1)
 
     ##----------------------------fc layer
     with tf.name_scope('fc') as scope:
       level1_dim = self.input_dim + self.input_dim2 + self.input_dim5 + self.output_dim + self.output_dim2
-      level1_dim += 3 * self.args['filters'] * len(self.args['kernel_sizes'])
+      level1_dim += 3 * self.args['emb_size']
       self.fc1_w0, self.fc1_b0 = TFBCUtils.create_w_b(level1_dim, self.mid_dim, w_name="fc1_w0", b_name="fc1_b0")
       self.fc21_w0, self.fc21_b0 = TFBCUtils.create_w_b(self.mid_dim, self.output_dim, w_name="fc21_w0",
                                                         b_name="fc21_b0")
@@ -200,16 +208,11 @@ class VedioClassifyEmbRNN():
 
         ## feed data to tf session
         feed_dict = {
-          self.label1: train_data['label1'],
-          self.label2: train_data['label2'],
-          self.lda1000: train_data['lda1000'],
-          self.lda2000: train_data['lda2000'],
-          self.lda5000: train_data['lda5000'],
-          self.bizclass1: train_data['bizclass1'],
-          self.bizclass2: train_data['bizclass2'],
-          self.titleseg: train_data['titleseg'],
-          self.vtitleseg: train_data['vtitleseg'],
-          self.contentseg: train_data['contentseg'],
+          self.label1: train_data['label1'], self.label2: train_data['label2'],
+          self.lda1000: train_data['lda1000'], self.lda2000: train_data['lda2000'], self.lda5000: train_data['lda5000'],
+          self.bizclass1: train_data['bizclass1'], self.bizclass2: train_data['bizclass2'],
+          self.titleseg: train_data['titleseg'], self.vtitleseg: train_data['vtitleseg'], self.contentseg: train_data['contentseg'],
+          self.titlelen: train_data['titlelen'], self.vtitlelen: train_data['vtitlelen'], self.contentlen: train_data['contentlen'],
           self.global_step: step
         }
 
@@ -232,16 +235,11 @@ class VedioClassifyEmbRNN():
 
           test_data = readdata.read_testdata_batch_ansyc()
           feed_dict = {
-            self.label1: test_data['label1'],
-            self.label2: test_data['label2'],
-            self.lda1000: test_data['lda1000'],
-            self.lda2000: test_data['lda2000'],
-            self.lda5000: test_data['lda5000'],
-            self.bizclass1: test_data['bizclass1'],
-            self.bizclass2: test_data['bizclass2'],
-            self.titleseg: test_data['titleseg'],
-            self.vtitleseg: test_data['vtitleseg'],
-            self.contentseg: test_data['contentseg'],
+            self.label1: test_data['label1'], self.label2: test_data['label2'],
+            self.lda1000: test_data['lda1000'], self.lda2000: test_data['lda2000'], self.lda5000: test_data['lda5000'],
+            self.bizclass1: test_data['bizclass1'], self.bizclass2: test_data['bizclass2'],
+            self.titleseg: test_data['titleseg'], self.vtitleseg: test_data['vtitleseg'], self.contentseg: test_data['contentseg'],
+            self.titlelen: test_data['titlelen'], self.vtitlelen: test_data['vtitlelen'], self.contentlen: test_data['contentlen'],
             self.global_step: step
           }
 
@@ -279,14 +277,10 @@ class VedioClassifyEmbRNN():
 
       while predata['L'] > 0:
         feed_dict = {
-          self.lda1000: predata['lda1000'],
-          self.lda2000: predata['lda2000'],
-          self.lda5000: predata['lda5000'],
-          self.bizclass1: predata['bizclass1'],
-          self.bizclass2: predata['bizclass2'],
-          self.titleseg: predata['titleseg'],
-          self.vtitleseg: predata['vtitleseg'],
-          self.contentseg: predata['contentseg'],
+          self.lda1000: predata['lda1000'], self.lda2000: predata['lda2000'], self.lda5000: predata['lda5000'],
+          self.bizclass1: predata['bizclass1'], self.bizclass2: predata['bizclass2'],
+          self.titleseg: predata['titleseg'], self.vtitleseg: predata['vtitleseg'], self.contentseg: predata['contentseg'],
+          self.titlelen: predata['titlelen'], self.vtitlelen: predata['vtitlelen'], self.contentlen: predata['contentlen'],
           self.global_step: 0
         }
 
@@ -333,7 +327,7 @@ def parse_args():
 
 if __name__ == "__main__":
   args = parse_args()
-  
+
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
 
@@ -361,5 +355,5 @@ if __name__ == "__main__":
     model = VedioClassifyEmbRNN(param, readdata.vocab)
     model.train(readdata)
     readdata.stop_and_wait_ansyc()
-    
+
 

@@ -397,8 +397,9 @@ class VedioClassifyBizuinInputAnsyEmb(object):
     
   def parseVocab(self, line, maxsize):    
     ret = self.vocab.string2id([item for item in line.strip().split(' ')])
-    if(len(ret)<maxsize): ret.extend( [0]*(maxsize-len(ret)) )
-    return np.array(ret[:maxsize])
+    linelen=len(ret)
+    if(linelen<maxsize): ret.extend( [0]*(maxsize-len(ret)) )
+    return np.array(ret[:maxsize]), min(linelen, maxsize)
     
   def parseLable(self, line, labelnum):
     ret = np.zeros(labelnum)
@@ -422,6 +423,9 @@ class VedioClassifyBizuinInputAnsyEmb(object):
     titleseg = []
     vtitleseg = []
     contentseg = []
+    titlelen = []
+    vtitlelen = []
+    contentlen = []
     bizclass1 = []
     bizclass2 = []
 
@@ -440,9 +444,12 @@ class VedioClassifyBizuinInputAnsyEmb(object):
         bizclass1.append(self.parseBizClass(fields[4], self.level1_size, fields[9]))
         bizclass2.append(self.parseBizClass(fields[5], self.level2_size, fields[10]))
       
-      titleseg.append(self.parseVocab(fields[6], self.titlemaxsize))
-      vtitleseg.append(self.parseVocab(fields[7], self.titlemaxsize))
-      contentseg.append(self.parseVocab(fields[8], self.articlemaxsize))
+      seg, slen = self.parseVocab(fields[6], self.titlemaxsize)
+      titleseg.append(seg);titlelen.append(slen)
+      seg, slen = self.parseVocab(fields[7], self.titlemaxsize)
+      vtitleseg.append(seg);vtitlelen.append(slen)
+      seg, slen = self.parseVocab(fields[8], self.articlemaxsize)
+      contentseg.append(seg);contentlen.append(slen)
       
       label1.append(self.parseLable(fields[9], self.level1_size))
       label2.append(self.parseLable(fields[10], self.level2_size))
@@ -453,6 +460,7 @@ class VedioClassifyBizuinInputAnsyEmb(object):
             'lda1000': lda1000, 'lda2000': lda2000, 'lda5000': lda5000,
             'bizclass1': bizclass1, 'bizclass2': bizclass2,
             'titleseg': titleseg, 'vtitleseg': vtitleseg, 'contentseg': contentseg,
+            'titlelen': titlelen, 'vtitlelen': vtitlelen, 'contentlen': contentlen,
             'addinfo': addinfo }
                                          
   def read_preddata_batch(self, size=256):
@@ -494,7 +502,7 @@ if __name__ == '__main__':
   print(vars(args))
   readdata = VedioClassifyBizuinInputAnsyEmb(vars(args))
 
-  ret = readdata.read_preddata_batch(size=1)
+  ret = readdata.read_preddata_batch(size=3)
   if ret['L']>0:
     print(ret)
 
