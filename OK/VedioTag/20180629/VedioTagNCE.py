@@ -5,10 +5,9 @@ from __future__ import print_function
 
 import argparse
 import datetime
+import math
 import os
 import sys
-import time
-import math
 
 import numpy as np
 import tensorflow as tf

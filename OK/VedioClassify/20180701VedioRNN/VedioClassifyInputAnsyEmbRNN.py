@@ -219,7 +219,7 @@ class TxtFilesRandomReader(object):
     self.lines = self.lines[size:]
     return ret
 
-class VedioTagNCEInputAnsy(object):
+class VedioClassifyBizuinInputAnsyEmb(object):
   def __init__(self, inputargs):
     self.args = inputargs    
     print('VedioClassifyBizuinInputAnsyEmb:', str(self.args))
@@ -397,55 +397,70 @@ class VedioTagNCEInputAnsy(object):
     
   def parseVocab(self, line, maxsize):    
     ret = self.vocab.string2id([item for item in line.strip().split(' ')])
-    if(len(ret)<maxsize): ret.extend( [0]*(maxsize-len(ret)) )
-    return np.array(ret[:maxsize])
+    linelen=len(ret)
+    if(linelen<maxsize): ret.extend( [0]*(maxsize-len(ret)) )
+    return np.array(ret[:maxsize]), min(linelen, maxsize)
     
   def parseLable(self, line, labelnum):
     ret = np.zeros(labelnum)
     ret[int(line)] = 1.0
     return ret
 
-#regexp_replace(concat(vid, '_', bizuin, '_', mid, '_', idx, '_', tag, '_', title, '_', vtitle, '_', nickname), '\\|', ''), '|',
+#SELECT concat( regexp_replace(concat(vid, '_', bizuin, '_', mid, '_', idx, '_', title, '_', vtitle, '_', nickname), '\\|', ''), '|',
 #               lda1000, '|', lda2000, '|', lda5000, '|', 
 #               bizuinclass1, '|', bizuinclass2, '|', 
 #               regexp_replace(titleseg, '\\|', ''), '|', 
 #               regexp_replace(vtitleseg, '\\|', ''), '|', 
 #               regexp_replace(contentseg, '\\|', ''), '|', 
-#               tagid)
+#               firstorder, '|', secondorder)
   def processing_batch(self, lines, pred=False):
     addinfo = []
+    label1 = []
+    label2 = []
     lda1000 = []
     lda2000 = []
     lda5000 = []
     titleseg = []
     vtitleseg = []
     contentseg = []
+    titlelen = []
+    vtitlelen = []
+    contentlen = []
     bizclass1 = []
     bizclass2 = []
-    label = []
 
     for line in lines:
       fields = line.strip().split('|')
-      if len(fields) < 8 : continue
+      if len(fields) < 11 : continue
 
       addinfo.append(fields[0])
       lda1000.append(self.parseLDAArray(fields[1], 1000))
       lda2000.append(self.parseLDAArray(fields[2], 2000))
       lda5000.append(self.parseLDAArray(fields[3], 5000))
-      bizclass1.append(self.parseBizClass(fields[4], self.level1_size, '10000'))
-      bizclass2.append(self.parseBizClass(fields[5], self.level2_size, '10000')) 
+      if pred:
+        bizclass1.append(self.parseBizClass(fields[4], self.level1_size, '10000'))
+        bizclass2.append(self.parseBizClass(fields[5], self.level2_size, '10000'))        
+      else:
+        bizclass1.append(self.parseBizClass(fields[4], self.level1_size, fields[9]))
+        bizclass2.append(self.parseBizClass(fields[5], self.level2_size, fields[10]))
       
-      titleseg.append(self.parseVocab(fields[6], self.titlemaxsize))
-      vtitleseg.append(self.parseVocab(fields[7], self.titlemaxsize))
-      contentseg.append(self.parseVocab(fields[8], self.articlemaxsize))
+      seg, slen = self.parseVocab(fields[6], self.titlemaxsize)
+      titleseg.append(seg);titlelen.append(slen)
+      seg, slen = self.parseVocab(fields[7], self.titlemaxsize)
+      vtitleseg.append(seg);vtitlelen.append(slen)
+      seg, slen = self.parseVocab(fields[8], self.articlemaxsize)
+      contentseg.append(seg);contentlen.append(slen)
       
-      label.append([int(fields[9])-1])
+      label1.append(self.parseLable(fields[9], self.level1_size))
+      label2.append(self.parseLable(fields[10], self.level2_size))
       
-    return {'L': len(label) if len(label)==len(addinfo) else 0,
-            'label': label,
+
+    return {'L': len(label1) if len(label1)==len(addinfo) else 0,
+            'label1': label1, 'label2' : label2,
             'lda1000': lda1000, 'lda2000': lda2000, 'lda5000': lda5000,
             'bizclass1': bizclass1, 'bizclass2': bizclass2,
             'titleseg': titleseg, 'vtitleseg': vtitleseg, 'contentseg': contentseg,
+            'titlelen': titlelen, 'vtitlelen': vtitlelen, 'contentlen': contentlen,
             'addinfo': addinfo }
                                          
   def read_preddata_batch(self, size=256):
@@ -471,11 +486,11 @@ if __name__ == '__main__':
                       help='Vocab file path.')
   parser.add_argument('--vocab_size', type=int, default=0,
                       help='Vocab size.')
-  parser.add_argument('--dataset', nargs='+', default=['tagdata'],
+  parser.add_argument('--dataset', nargs='+', default=['VedioClassifyBizuinInputAnsyEbm'],
                       help='Choose a train dataset.')
-  parser.add_argument('--testset', nargs='*', default=['tagdata'],
+  parser.add_argument('--testset', nargs='*', default=['VedioClassifyBizuinInputAnsyEbm'],
                       help='Choose a test dataset.')
-  parser.add_argument('--predset', nargs='*', default=['tagdata'],
+  parser.add_argument('--predset', nargs='*', default=['VedioClassifyBizuinInputAnsyEbm'],
                       help='Choose a pred dataset.')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
@@ -485,11 +500,11 @@ if __name__ == '__main__':
                       help='Data batch size')
   args = parser.parse_args()
   print(vars(args))
-  readdata = VedioTagNCEInputAnsy(vars(args))
+  readdata = VedioClassifyBizuinInputAnsyEmb(vars(args))
 
-  ret = readdata.read_preddata_batch(size=1)
-  #if ret['L']>0:
-  print(ret)
+  ret = readdata.read_preddata_batch(size=3)
+  if ret['L']>0:
+    print(ret)
 
 #  readdata.start_ansyc()
 #  train_data = readdata.read_testdata_batch_ansyc()

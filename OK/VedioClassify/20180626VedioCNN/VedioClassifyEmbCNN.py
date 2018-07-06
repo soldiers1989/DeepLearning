@@ -9,11 +9,11 @@ import os
 import sys
 import time
 
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
-from VedioClassifyInputAnsyEmbRNN import VedioClassifyBizuinInputAnsyEmb
-
-import TFBCUtils
+from VedioClassifyBizuinInputAnsyEmb import VedioClassifyBizuinInputAnsyEmb
+from TFBCUtils import Vocab
 
 Py3 = sys.version_info[0] == 3
 if not Py3: import codecs
@@ -33,11 +33,11 @@ param = {
   'total_batch': 1000,
   'decay_steps': 1000,
   'keep_prob': 0.5,
-    
+
   'emb_size': 100,
   'titlemax_size': 20,
   'articlemax_size': 200,
-    
+
   'vocab': 'data/model2.vec.proc',
   'vocab_size': 1000,
   'kernel_sizes': [2, 3],
@@ -54,19 +54,18 @@ param2 = {
   'predset': [],
 
   'batch_size': 64,
-  'batch_size_test': 10240,
+  'batch_size_test': 1024,
   'test_batch': 1000,
   'save_batch': 5000,
-  'total_batch': 1000000,
+  'total_batch': 600000,
   'decay_steps': 5000,
   'keep_prob': 0.5,
-    
+
   'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classfy4/w2v/model2.vec.proc',
   'vocab_size': 0,
-  'kernel_sizes': [2, 3, 4],
+  'kernel_sizes': [1, 2, 3, 4],
   'filters': 200
 }
-
 #param.update(param2)
 
 class VedioClassify():
@@ -76,8 +75,8 @@ class VedioClassify():
     now = datetime.datetime.now()
     self.timestamp = now.strftime("%Y%m%d%H%M%S")
     print(self.args)
-    
-    self.vocab=vocab
+
+    self.vocab = vocab
 
     self.input_dim = 1000
     self.input_dim2 = 2000
@@ -96,58 +95,64 @@ class VedioClassify():
       self.lda5000 = tf.placeholder(dtype='float', shape=[None, self.input_dim5], name='input_lda5000')
       self.bizclass1 = tf.placeholder(dtype='float', shape=[None, self.output_dim], name='input_bizclass1')
       self.bizclass2 = tf.placeholder(dtype='float', shape=[None, self.output_dim2], name='input_bizclass2')
-      
+
       self.titleseg = tf.placeholder(shape=[None, self.args['titlemax_size']], dtype=tf.int32, name='input_titleseg')
       self.vtitleseg = tf.placeholder(shape=[None, self.args['titlemax_size']], dtype=tf.int32, name='input_vtitleseg')
-      self.contentseg = tf.placeholder(shape=[None, self.args['articlemax_size']], dtype=tf.int32, name='input_contentseg')
-      
+      self.contentseg = tf.placeholder(shape=[None, self.args['articlemax_size']], dtype=tf.int32,
+                                       name='input_contentseg')
+
       self.label1 = tf.placeholder(dtype='float', shape=[None, self.output_dim], name='input_label1')
       self.label2 = tf.placeholder(dtype='float', shape=[None, self.output_dim2], name='input_labe2')
 
     with tf.name_scope('param') as scope:
       self.keep_prob = tf.placeholder(dtype="float", name='keep_prob')
       self.global_step = tf.placeholder(dtype=np.int32, name="global_step")
-      
+
     ##----------------------------embedding layer
-    with tf.name_scope('embedding') as scope, with tf.device('/cpu:0'):
+    with tf.name_scope('embedding') as scope:
       self.embedding = TFBCUtils.addvocabembedding(self.vocab)
-      
+
       self.titleembedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.titleseg), -1)
       self.vtitleembedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.vtitleseg), -1)
       self.contentbedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.contentseg), -1)
 
     ##----------------------------conv layer
     with tf.name_scope('conv') as scope:
-      self.convparam=[]
-      self.convresult=[]
+      self.convparam = []
+      self.convresult = []
       for kernel_sizes in self.args['kernel_sizes']:
-        cnn_w0 = tf.Variable(tf.random_uniform([kernel_sizes, self.args['emb_size'], 1, self.args['filters']], -0.2,0.2), 
-                             dtype='float32', name="cnn_%d_w0"%kernel_sizes)
-        cnn_b0 = tf.Variable(tf.constant(0.00001, shape=[self.args['filters']]), 
-                             name = "cnn_%d_b0"%kernel_sizes)
-        self.convparam.append((cnn_w0,cnn_b0))
-                             
-        titlecnn = tf.add(tf.nn.conv2d(self.titleembedding, cnn_w0, [1,1,1,1], padding='VALID'), cnn_b0)
-        titlecnn = tf.nn.relu(titlecnn)
-        titlemax = tf.nn.max_pool(titlecnn, [1, self.args['titlemax_size']-kernel_sizes+1,1,1], [1,1,1,1], padding='VALID')
-        titlemax = tf.squeeze(titlemax, [1, 2]) 
+        cnn_w0 = tf.Variable(
+          tf.random_uniform([kernel_sizes, self.args['emb_size'], 1, self.args['filters']], -0.2, 0.2),
+          dtype='float32', name="cnn_%d_w0" % kernel_sizes)
+        cnn_b0 = tf.Variable(tf.constant(0.00001, shape=[self.args['filters']]),
+                             name="cnn_%d_b0" % kernel_sizes)
+        self.convparam.append((cnn_w0, cnn_b0))
 
-        vtitlecnn = tf.add(tf.nn.conv2d(self.vtitleembedding, cnn_w0, [1,1,1,1], padding='VALID'), cnn_b0)
+        titlecnn = tf.add(tf.nn.conv2d(self.titleembedding, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
+        titlecnn = tf.nn.relu(titlecnn)
+        titlemax = tf.nn.max_pool(titlecnn, [1, self.args['titlemax_size'] - kernel_sizes + 1, 1, 1], [1, 1, 1, 1],
+                                  padding='VALID')
+        titlemax = tf.squeeze(titlemax, [1, 2])
+
+        vtitlecnn = tf.add(tf.nn.conv2d(self.vtitleembedding, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
         vtitlecnn = tf.nn.relu(vtitlecnn)
-        vtitlemax = tf.nn.max_pool(vtitlecnn, [1, self.args['titlemax_size']-kernel_sizes+1,1,1], [1,1,1,1], padding='VALID')
-        titlemax = tf.squeeze(vtitlemax, [1, 2]) 
-        
-        contentcnn = tf.add(tf.nn.conv2d(self.contentbedding, cnn_w0, [1,1,1,1], padding='VALID'), cnn_b0)
+        vtitlemax = tf.nn.max_pool(vtitlecnn, [1, self.args['titlemax_size'] - kernel_sizes + 1, 1, 1], [1, 1, 1, 1],
+                                   padding='VALID')
+        titlemax = tf.squeeze(vtitlemax, [1, 2])
+
+        contentcnn = tf.add(tf.nn.conv2d(self.contentbedding, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
         contentcnn = tf.nn.relu(contentcnn)
-        contentmax = tf.nn.max_pool(contentcnn, [1, self.args['articlemax_size']-kernel_sizes+1,1,1], [1,1,1,1], padding='VALID')
-        contentmax = tf.squeeze(contentmax, [1, 2]) 
-        
+        contentmax = tf.nn.max_pool(contentcnn, [1, self.args['articlemax_size'] - kernel_sizes + 1, 1, 1],
+                                    [1, 1, 1, 1], padding='VALID')
+        contentmax = tf.squeeze(contentmax, [1, 2])
+
         mergered = tf.concat([titlemax, titlemax, contentmax], 1)
         self.convresult.append(mergered)
 
     ##----------------------------concat layer
     with tf.name_scope('concat') as scope:
-      self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2] + self.convresult, 1)
+      self.concat_item = tf.concat(
+        [self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2] + self.convresult, 1)
 
     ##----------------------------fc layer
     with tf.name_scope('fc') as scope:
@@ -173,7 +178,7 @@ class VedioClassify():
       self.cross_weight2 = tf.constant(0.8, dtype='float')
       self.cross_entropy = self.cross_weight1 * self.cross_entropy1 + self.cross_weight2 * self.cross_entropy2
 
-      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
+      self.learning_rate = tf.train.exponential_decay(0.00005, self.global_step, self.args['decay_steps'], 0.97)
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
 
     ##----------------------------acc compute
@@ -231,16 +236,10 @@ class VedioClassify():
 
           test_data = readdata.read_testdata_batch_ansyc()
           feed_dict = {
-            self.label1: test_data['label1'],
-            self.label2: test_data['label2'],
-            self.lda1000: test_data['lda1000'],
-            self.lda2000: test_data['lda2000'],
-            self.lda5000: test_data['lda5000'],
-            self.bizclass1: test_data['bizclass1'],
-            self.bizclass2: test_data['bizclass2'],
-            self.titleseg: test_data['titleseg'],
-            self.vtitleseg: test_data['vtitleseg'],
-            self.contentseg: test_data['contentseg'],
+            self.label1: test_data['label1'], self.label2: test_data['label2'],
+            self.lda1000: test_data['lda1000'], self.lda2000: test_data['lda2000'], self.lda5000: test_data['lda5000'],
+            self.bizclass1: test_data['bizclass1'], self.bizclass2: test_data['bizclass2'],
+            self.titleseg: test_data['titleseg'], self.vtitleseg: test_data['vtitleseg'], self.contentseg: test_data['contentseg'],
             self.global_step: step
           }
 
@@ -268,43 +267,47 @@ class VedioClassify():
           self.saver.save(session, os.path.join(self.args['modelpath'], model_name))
 
   def infer(self, readdata, outf):
+    pflag = 1
     with tf.Session() as sess:
       self.saver = tf.train.Saver()
-      print('Loading model:'+self.args['ckpt'])
-      #self.saver.restore(sess, tf.train.latest_checkpoint(self.args['ckpt']))
+      print('Loading model:' + self.args['ckpt'])
       self.saver.restore(sess, self.args['ckpt'])
 
       predata = readdata.read_preddata_batch()
+      if pflag > 0: print('Batch size %d' % predata['L'])
 
       while predata['L'] > 0:
         feed_dict = {
-          self.lda1000: predata['lda1000'],
-          self.lda2000: predata['lda2000'],
-          self.lda5000: predata['lda5000'],
-          self.bizclass1: predata['bizclass1'],
-          self.bizclass2: predata['bizclass2'],
-          self.titleseg: predata['titleseg'],
-          self.vtitleseg: predata['vtitleseg'],
+          self.lda1000: predata['lda1000'], self.lda2000: predata['lda2000'], self.lda5000: predata['lda5000'],
+          self.bizclass1: predata['bizclass1'], self.bizclass2: predata['bizclass2'],
+          self.titleseg: predata['titleseg'], self.vtitleseg: predata['vtitleseg'],
           self.contentseg: predata['contentseg'],
           self.global_step: 0
         }
 
         p1, p2 = sess.run([self.pred1, self.pred2], feed_dict=feed_dict)
         for k, r1, r2 in zip(predata['addinfo'], p1, p2):
-          maxidx1=np.argmax(r1)
-          maxidx2=np.argmax(r2)
-          outf.write('%d|%f|%d|%f|'%(maxidx1, r1[maxidx1], maxidx2, r2[maxidx2]))
+          maxidx1 = np.argmax(r1)
+          maxidx2 = np.argmax(r2)
+          outf.write('%d|%f|%d|%f|' % (maxidx1, r1[maxidx1], maxidx2, r2[maxidx2]))
           outf.write(','.join([str(x) for x in r1]))
           outf.write('|')
           outf.write(','.join([str(x) for x in r2]))
-          r1[maxidx1]=0; r2[maxidx2]=0;
-          maxidx1=np.argmax(r1)
-          maxidx2=np.argmax(r2)
-          outf.write('|%d|%f|%d|%f|'%(maxidx1, r1[maxidx1], maxidx2, r2[maxidx2]))
-          k=k.replace('_', '|', 1)
-          outf.write( k + '\n')
+          r1[maxidx1] = 0;
+          r2[maxidx2] = 0;
+          maxidx1 = np.argmax(r1)
+          maxidx2 = np.argmax(r2)
+          outf.write('|%d|%f|%d|%f|' % (maxidx1, r1[maxidx1], maxidx2, r2[maxidx2]))
+          k = k.replace('_', '|', 1)
+          outf.write(k + '\n')
+
+        if pflag > 0:
+          print('Batch size %d' % predata['L'])
+          pflag += 1
+          if (pflag > 5): pflag = 0
 
         predata = readdata.read_preddata_batch()
+
 
 def str2bool(v):
   if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -321,18 +324,19 @@ def parse_args():
                       help='Using pred function.')
   parser.add_argument('--inputpath', nargs='?', default='data/',
                       help='Input data path.')
-  parser.add_argument('--predset', nargs='+', default=['cdatabizuinpic'],
+  parser.add_argument('--predset', nargs='+', default=['VedioClassifyBizuinInputAnsyEbm2'],
                       help='Choose a pred dataset.')
   parser.add_argument('--predoutputfile', nargs='?', default='vedio.pred',
                       help='Choose a pred dataset.')
-  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\dnn-model-20180613143500-500',
+  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\dnn-model-20180706103406-500',
                       help='Path to save the model.')
 
   return parser.parse_args()
 
+
 if __name__ == "__main__":
   args = parse_args()
-  
+
   config = tf.ConfigProto()
   config.gpu_options.allow_growth = True
 
@@ -348,11 +352,14 @@ if __name__ == "__main__":
         model.infer(readdata, outf)
     else:
       import sys
+
       reload(sys)
       sys.setdefaultencoding("utf-8")
       with codecs.open(outfname, 'w', encoding='utf-8') as outf:
         print('Using codecs.open')
         model.infer(readdata, outf)
+
+    print('DONE')
 
   else:
     readdata = VedioClassifyBizuinInputAnsyEmb(param)
@@ -360,5 +367,3 @@ if __name__ == "__main__":
     model = VedioClassify(param, readdata.vocab)
     model.train(readdata)
     readdata.stop_and_wait_ansyc()
-    
-

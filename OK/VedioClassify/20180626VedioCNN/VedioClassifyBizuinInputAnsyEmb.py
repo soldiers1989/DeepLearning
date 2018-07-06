@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import argparse
-import codecs
-import datetime
-import os
-import random
 import sys
+import os
+import pickle
+import random
+import datetime
 import threading
-from itertools import islice
-
+import codecs
 import numpy as np
+import argparse
 from TFBCUtils import Vocab
-
+from itertools import product
+from itertools import islice
 Py3 = sys.version_info[0] == 3
 if Py3:
   from queue import Queue
@@ -221,8 +221,7 @@ class TxtFilesRandomReader(object):
 
 class VedioClassifyBizuinInputAnsyEmb(object):
   def __init__(self, inputargs):
-    self.args = inputargs    
-    print('VedioClassifyBizuinInputAnsyEmb:', str(self.args))
+    self.args = inputargs
     self.inputpath = inputargs['inputpath']
     if not self.inputpath.endswith(''):
       self.inputpath+=os.sep
@@ -457,7 +456,7 @@ class VedioClassifyBizuinInputAnsyEmb(object):
                                          
   def read_preddata_batch(self, size=256):
     lines = self.preddata.read_batch(size)
-    return self.processing_batch(lines)
+    return self.processing_batch(lines, pred=True)
 
 def str2bool(v):
   if v.lower() in ('yes', 'true', 't', 'y', '1'):

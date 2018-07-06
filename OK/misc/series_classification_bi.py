@@ -133,7 +133,7 @@ def dynamicRNN(x, seqlen, weights, biases):
     outputs, states = tf.nn.bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell,
         x, dtype=tf.float32, sequence_length=seqlen)
         
-    outputs=tf.concat(bioutputs, 2)  # (3, 20, 128) = (batch_size, max_seq_len, n_hidden*2)
+    outputs=tf.concat(outputs, 2)  # (3, 20, 128) = (batch_size, max_seq_len, n_hidden*2)
     
     # outputs的形状为(batch_size, max_seq_len, n_hidden)
     # 如果有疑问可以参考上一章内容
