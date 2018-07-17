@@ -67,7 +67,7 @@ param2 = {
   'filters': 200
 }
 
-param.update(param2)
+#param.update(param2)
 
 class VedioClassifyEmbRNN():
   def __init__(self, args, vocab):
