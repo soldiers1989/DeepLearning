@@ -154,6 +154,7 @@ class VedioClassifyEmbRNN():
 
     ##----------------------------concat layer
     with tf.name_scope('concat') as scope:
+      #self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2] + self.convresult, 1)
       self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000,
           self.bizclass1, self.bizclass2, self.titlernn, self.vtitlernn, self.contentrnn], 1)
 

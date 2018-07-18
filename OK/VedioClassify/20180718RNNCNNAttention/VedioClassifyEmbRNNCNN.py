@@ -88,32 +88,13 @@ class VedioClassifyEmbRNN():
 
     self._init_graph()
 
-  def create_rnn(self, x, seqlen, seq_max_len, name):
+
+  def create_rnn4cnn(self, x, seqlen, seq_max_len, name):
     with tf.name_scope(name) as scope:
       with tf.variable_scope(name):
-        # 输入x的形状： (batch_size, max_seq_len, n_input) 输入seqlen的形状：(batch_size, )
-        # 定义一个lstm_cell，隐层的大小为n_hidden（之前的参数）
         lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(self.args['emb_size'])
-
-        # 使用tf.nn.dynamic_rnn展开时间维度
-        # 此外sequence_length=seqlen也很重要，它告诉TensorFlow每一个序列应该运行多少步
         outputs, states = tf.nn.dynamic_rnn(lstm_cell, x, dtype=tf.float32, sequence_length=seqlen)
-
-        # outputs的形状为(batch_size, max_seq_len, n_hidden)
-        # 我们希望的是取出与序列长度相对应的输出。如一个序列长度为10，我们就应该取出第10个输出
-        # 但是TensorFlow不支持直接对outputs进行索引，因此我们用下面的方法来做：
-
-        batch_size = tf.shape(outputs)[0]
-        # 得到每一个序列真正的index
-        # tf.range 创建一个数字序列
-        # tf.gather根据索引，从输入张量中依次取元素，构成一个新的张量。
-        #                       [0 1 2] * 20          + [ 9, 18, 19] - 1
-        index = tf.range(0, batch_size) * seq_max_len + (seqlen - 1)  # [ 8 37 58]
-        #                   tf.reshape(outputs, [-1, n_hidden])   size: (60, 64)  60=3*20
-        outputs = tf.gather(tf.reshape(outputs, [-1, self.args['emb_size']]), index)
-        # size: (3, 64) 取了60里的[ 8 37 58]
-
-        return outputs
+    return outputs
 
   def _init_graph(self):
     ##----------------------------input
@@ -148,19 +129,56 @@ class VedioClassifyEmbRNN():
         self.contentbedding = tf.nn.embedding_lookup(self.embedding, self.contentseg)
 
     ##----------------------------rnn layer
-    self.titlernn = self.create_rnn(self.titleembedding, self.titlelen, self.args['titlemax_size'], 'titlernn')
-    self.vtitlernn = self.create_rnn(self.vtitleembedding, self.vtitlelen, self.args['titlemax_size'], 'vtitlernn')
-    self.contentrnn = self.create_rnn(self.contentbedding, self.contentlen, self.args['articlemax_size'], 'contentrnn')
+    self.titlernn = self.create_rnn4cnn(self.titleembedding, self.titlelen, self.args['titlemax_size'], 'titlernn')
+    self.vtitlernn = self.create_rnn4cnn(self.vtitleembedding, self.vtitlelen, self.args['titlemax_size'], 'vtitlernn')
+    self.contentrnn = self.create_rnn4cnn(self.contentbedding, self.contentlen, self.args['articlemax_size'], 'contentrnn')
+    
+    self.titlernn = tf.expand_dims(self.titlernn, -1)
+    self.vtitlernn = tf.expand_dims(self.vtitlernn, -1)
+    self.contentrnn = tf.expand_dims(self.contentrnn, -1)   
+    
+    ##----------------------------conv layer
+    with tf.name_scope('conv') as scope:
+      self.convparam = []
+      self.convresult = []
+      for kernel_sizes in self.args['kernel_sizes']:
+        cnn_w0 = tf.Variable(
+          tf.random_uniform([kernel_sizes, self.args['emb_size'], 1, self.args['filters']], -0.2, 0.2),
+          dtype='float32', name="cnn_%d_w0" % kernel_sizes)
+        cnn_b0 = tf.Variable(tf.constant(0.00001, shape=[self.args['filters']]),
+                             name="cnn_%d_b0" % kernel_sizes)
+        self.convparam.append((cnn_w0, cnn_b0))
+
+        titlecnn = tf.add(tf.nn.conv2d(self.titlernn, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
+        titlecnn = tf.nn.relu(titlecnn)
+        titlemax = tf.nn.max_pool(titlecnn, [1, self.args['titlemax_size'] - kernel_sizes + 1, 1, 1], [1, 1, 1, 1],
+                                  padding='VALID')
+        titlemax = tf.squeeze(titlemax, [1, 2])
+
+        vtitlecnn = tf.add(tf.nn.conv2d(self.vtitlernn, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
+        vtitlecnn = tf.nn.relu(vtitlecnn)
+        vtitlemax = tf.nn.max_pool(vtitlecnn, [1, self.args['titlemax_size'] - kernel_sizes + 1, 1, 1], [1, 1, 1, 1],
+                                   padding='VALID')
+        titlemax = tf.squeeze(vtitlemax, [1, 2])
+
+        contentcnn = tf.add(tf.nn.conv2d(self.contentrnn, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
+        contentcnn = tf.nn.relu(contentcnn)
+        contentmax = tf.nn.max_pool(contentcnn, [1, self.args['articlemax_size'] - kernel_sizes + 1, 1, 1],
+                                    [1, 1, 1, 1], padding='VALID')
+        contentmax = tf.squeeze(contentmax, [1, 2])
+
+        mergered = tf.concat([titlemax, titlemax, contentmax], 1)
+        self.convresult.append(mergered)
 
     ##----------------------------concat layer
     with tf.name_scope('concat') as scope:
-      self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000,
-          self.bizclass1, self.bizclass2, self.titlernn, self.vtitlernn, self.contentrnn], 1)
+      self.concat_item = tf.concat(
+        [self.lda1000, self.lda2000, self.lda5000, self.bizclass1, self.bizclass2] + self.convresult, 1)
 
     ##----------------------------fc layer
     with tf.name_scope('fc') as scope:
       level1_dim = self.input_dim + self.input_dim2 + self.input_dim5 + self.output_dim + self.output_dim2
-      level1_dim += 3 * self.args['emb_size']
+      level1_dim += 3 * self.args['filters'] * len(self.args['kernel_sizes'])
       self.fc1_w0, self.fc1_b0 = TFBCUtils.create_w_b(level1_dim, self.mid_dim, w_name="fc1_w0", b_name="fc1_b0")
       self.fc21_w0, self.fc21_b0 = TFBCUtils.create_w_b(self.mid_dim, self.output_dim, w_name="fc21_w0",
                                                         b_name="fc21_b0")
@@ -181,7 +199,7 @@ class VedioClassifyEmbRNN():
       self.cross_weight2 = tf.constant(0.8, dtype='float')
       self.cross_entropy = self.cross_weight1 * self.cross_entropy1 + self.cross_weight2 * self.cross_entropy2
 
-      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
+      self.learning_rate = tf.train.exponential_decay(0.00005, self.global_step, self.args['decay_steps'], 0.98)
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
 
     ##----------------------------acc compute
@@ -258,6 +276,10 @@ class VedioClassifyEmbRNN():
         else:
           ## run optimizer
           _, l = session.run([self.optimizer, self.cross_entropy], feed_dict=feed_dict)
+          
+        if np.isnan(l):
+          print('Loss is NaN')
+          return
 
         if (step > 0 and step % self.args['save_batch'] == 0):
           model_name = "dnn-model-" + self.timestamp + '-' + str(step)

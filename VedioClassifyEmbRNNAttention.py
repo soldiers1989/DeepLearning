@@ -11,6 +11,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib import rnn
 from VedioClassifyInputAnsyEmbRNN import VedioClassifyBizuinInputAnsyEmb
 
 import TFBCUtils
@@ -37,6 +38,7 @@ param = {
   'emb_size': 100,
   'titlemax_size': 20,
   'articlemax_size': 200,
+  'num_layers': 1,
 
   'vocab': 'data/model2.vec.proc',
   'vocab_size': 1000,
@@ -63,13 +65,13 @@ param2 = {
 
   'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classfy4/w2v/model2.vec.proc',
   'vocab_size': 0,
-  'kernel_sizes': [2, 3, 4],
+  'kernel_sizes': [1, 2, 3, 4],
   'filters': 200
 }
 
-#param.update(param2)
+param.update(param2)
 
-class VedioClassifyEmbRNN():
+class VedioClassifyEmbRNNAttention():
   def __init__(self, args, vocab):
     self.args = args
 
@@ -88,32 +90,17 @@ class VedioClassifyEmbRNN():
 
     self._init_graph()
 
-  def create_rnn(self, x, seqlen, seq_max_len, name):
+  def create_rnn(self, x, seqlen, name):
     with tf.name_scope(name) as scope:
       with tf.variable_scope(name):
-        # 输入x的形状： (batch_size, max_seq_len, n_input) 输入seqlen的形状：(batch_size, )
-        # 定义一个lstm_cell，隐层的大小为n_hidden（之前的参数）
-        lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(self.args['emb_size'])
+        fw_cells = [rnn.BasicLSTMCell(self.args['emb_size']) for _ in range(self.args['num_layers'])]
+        bw_cells = [rnn.BasicLSTMCell(self.args['emb_size']) for _ in range(self.args['num_layers'])]
+        fw_cells = [rnn.DropoutWrapper(cell, output_keep_prob=self.keep_prob) for cell in fw_cells]
+        bw_cells = [rnn.DropoutWrapper(cell, output_keep_prob=self.keep_prob) for cell in bw_cells]
+                   # sGoutput_state_fw, sGoutput_state_bw
+        rnn_outputs, _, _ = rnn.stack_bidirectional_dynamic_rnn(fw_cells, bw_cells, x, sequence_length=seqlen, dtype=tf.float32)
 
-        # 使用tf.nn.dynamic_rnn展开时间维度
-        # 此外sequence_length=seqlen也很重要，它告诉TensorFlow每一个序列应该运行多少步
-        outputs, states = tf.nn.dynamic_rnn(lstm_cell, x, dtype=tf.float32, sequence_length=seqlen)
-
-        # outputs的形状为(batch_size, max_seq_len, n_hidden)
-        # 我们希望的是取出与序列长度相对应的输出。如一个序列长度为10，我们就应该取出第10个输出
-        # 但是TensorFlow不支持直接对outputs进行索引，因此我们用下面的方法来做：
-
-        batch_size = tf.shape(outputs)[0]
-        # 得到每一个序列真正的index
-        # tf.range 创建一个数字序列
-        # tf.gather根据索引，从输入张量中依次取元素，构成一个新的张量。
-        #                       [0 1 2] * 20          + [ 9, 18, 19] - 1
-        index = tf.range(0, batch_size) * seq_max_len + (seqlen - 1)  # [ 8 37 58]
-        #                   tf.reshape(outputs, [-1, n_hidden])   size: (60, 64)  60=3*20
-        outputs = tf.gather(tf.reshape(outputs, [-1, self.args['emb_size']]), index)
-        # size: (3, 64) 取了60里的[ 8 37 58]
-
-        return outputs
+        return rnn_outputs
 
   def _init_graph(self):
     ##----------------------------input
@@ -148,19 +135,40 @@ class VedioClassifyEmbRNN():
         self.contentbedding = tf.nn.embedding_lookup(self.embedding, self.contentseg)
 
     ##----------------------------rnn layer
-    self.titlernn = self.create_rnn(self.titleembedding, self.titlelen, self.args['titlemax_size'], 'titlernn')
-    self.vtitlernn = self.create_rnn(self.vtitleembedding, self.vtitlelen, self.args['titlemax_size'], 'vtitlernn')
-    self.contentrnn = self.create_rnn(self.contentbedding, self.contentlen, self.args['articlemax_size'], 'contentrnn')
+    self.titlernn = self.create_rnn(self.titleembedding, self.titlelen, 'titlernn')
+    self.vtitlernn = self.create_rnn(self.vtitleembedding, self.vtitlelen, 'vtitlernn')
+    self.contentrnn = self.create_rnn(self.contentbedding, self.contentlen, 'contentrnn')
+
+    ##----------------------------attention layer
+    # Attention layer: produce a weight vector, and merge word-level features from each time step into a sentence-level feature vector, by multiplying the weight vector
+    # tf.layers.dense adds a single layer to your network. The second argument is the number of neurons/nodes of the layer.
+    # self.titlernn (?, 20, 200) (?, 20, 1) tf.layers.dense(self.titlernn, 1, activation=tf.nn.tanh)
+    self.title_attention_score = tf.nn.softmax(tf.layers.dense(self.titlernn, 1, activation=tf.nn.tanh))    
+    # self.title_attention_score (?, 20, 1)                (?, 200, 20)                              (?, 20, 1)
+    self.title_attention_out = tf.squeeze(tf.matmul(tf.transpose(self.titlernn, perm=[0, 2, 1]), self.title_attention_score),
+                axis=-1)
+    # self.title_attention_out (?, 200)
+
+    self.vtitle_attention_score = tf.nn.softmax(tf.layers.dense(self.vtitlernn, 1, activation=tf.nn.tanh))
+    self.vtitle_attention_out = tf.squeeze(tf.matmul(tf.transpose(self.vtitlernn, perm=[0, 2, 1]), self.vtitle_attention_score),
+                axis=-1)
+
+    # self.contentrnn (?, 200, 200)  (?, 200, 1)	 tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh)
+    self.content_attention_score = tf.nn.softmax(tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh))
+    # self.content_attention_score (?, 200, 1)
+    self.content_attention_out = tf.squeeze(tf.matmul(tf.transpose(self.contentrnn, perm=[0, 2, 1]), self.content_attention_score),
+                axis=-1)
+    # self.content_attention_out (?, 200)
 
     ##----------------------------concat layer
     with tf.name_scope('concat') as scope:
       self.concat_item = tf.concat([self.lda1000, self.lda2000, self.lda5000,
-          self.bizclass1, self.bizclass2, self.titlernn, self.vtitlernn, self.contentrnn], 1)
+          self.bizclass1, self.bizclass2, self.title_attention_out, self.vtitle_attention_out, self.content_attention_out], 1)
 
     ##----------------------------fc layer
     with tf.name_scope('fc') as scope:
       level1_dim = self.input_dim + self.input_dim2 + self.input_dim5 + self.output_dim + self.output_dim2
-      level1_dim += 3 * self.args['emb_size']
+      level1_dim += 3 * self.args['emb_size'] * 2 #  level1_dim=8802
       self.fc1_w0, self.fc1_b0 = TFBCUtils.create_w_b(level1_dim, self.mid_dim, w_name="fc1_w0", b_name="fc1_b0")
       self.fc21_w0, self.fc21_b0 = TFBCUtils.create_w_b(self.mid_dim, self.output_dim, w_name="fc21_w0",
                                                         b_name="fc21_b0")
@@ -212,7 +220,7 @@ class VedioClassifyEmbRNN():
           self.bizclass1: train_data['bizclass1'], self.bizclass2: train_data['bizclass2'],
           self.titleseg: train_data['titleseg'], self.vtitleseg: train_data['vtitleseg'], self.contentseg: train_data['contentseg'],
           self.titlelen: train_data['titlelen'], self.vtitlelen: train_data['vtitlelen'], self.contentlen: train_data['contentlen'],
-          self.global_step: step
+          self.global_step: step, self.keep_prob: self.args['keep_prob']
         }
 
         if (step > 0 and step % self.args['test_batch'] == 0):
@@ -239,7 +247,7 @@ class VedioClassifyEmbRNN():
             self.bizclass1: test_data['bizclass1'], self.bizclass2: test_data['bizclass2'],
             self.titleseg: test_data['titleseg'], self.vtitleseg: test_data['vtitleseg'], self.contentseg: test_data['contentseg'],
             self.titlelen: test_data['titlelen'], self.vtitlelen: test_data['vtitlelen'], self.contentlen: test_data['contentlen'],
-            self.global_step: step
+            self.global_step: step, self.keep_prob: 1.0
           }
 
           ## get acc
@@ -254,6 +262,18 @@ class VedioClassifyEmbRNN():
           print('[Test L]\t%s' % str(la2[:16]))
           print('[Test P]\t%s' % str(pa2[:16]))
           print("-----------------------------------------")
+
+#          vtitlernn, contentrnn, tscore, tout, cscore, cout = session.run([ self.vtitlernn, self.contentrnn, \
+#                       self.title_attention_score, self.title_attention_out, \
+#                       self.content_attention_score, self.content_attention_out], feed_dict=feed_dict)
+#          print('[Test]\tIter:%d\tvtitlernn=%s\ttscore=%s\ttout=%s\tcontentrnn=%s\tcscore=%s\tcout=%s' % (step,
+#              str(vtitlernn.shape), str(tscore.shape), str(tout.shape),
+#              str(contentrnn.shape), str(cscore.shape), str(cout.shape)),
+#              end='\n')
+#          content_tanh, title_tanh = session.run([ self.content_tanh, self.title_tanh ], feed_dict=feed_dict)
+#          print('[Test]\tIter:%d\tcontent_tanh=%s\ttitle_tanh=%s' % (step,
+#              str(content_tanh.shape), str(title_tanh.shape)),
+#              end='\n')         
 
         else:
           ## run optimizer
@@ -280,7 +300,7 @@ class VedioClassifyEmbRNN():
           self.bizclass1: predata['bizclass1'], self.bizclass2: predata['bizclass2'],
           self.titleseg: predata['titleseg'], self.vtitleseg: predata['vtitleseg'], self.contentseg: predata['contentseg'],
           self.titlelen: predata['titlelen'], self.vtitlelen: predata['vtitlelen'], self.contentlen: predata['contentlen'],
-          self.global_step: 0
+          self.global_step: 0, self.keep_prob: 1.0
         }
 
         p1, p2 = sess.run([self.pred1, self.pred2], feed_dict=feed_dict)
@@ -333,7 +353,7 @@ if __name__ == "__main__":
   if args.pred:
     param.update(vars(args))
     readdata = VedioClassifyBizuinInputAnsyEmb(param)
-    model = VedioClassifyEmbRNN(param, readdata.vocab)
+    model = VedioClassifyEmbRNNAttention(param, readdata.vocab)
 
     outfname = args.inputpath + os.sep + args.predoutputfile
 
@@ -351,7 +371,7 @@ if __name__ == "__main__":
   else:
     readdata = VedioClassifyBizuinInputAnsyEmb(param)
     readdata.start_ansyc()
-    model = VedioClassifyEmbRNN(param, readdata.vocab)
+    model = VedioClassifyEmbRNNAttention(param, readdata.vocab)
     model.train(readdata)
     readdata.stop_and_wait_ansyc()
 
