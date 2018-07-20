@@ -69,7 +69,7 @@ param2 = {
   'filters': 200
 }
 
-param.update(param2)
+#param.update(param2)
 
 class VedioClassifyEmbRNNAttention():
   def __init__(self, args, vocab):
@@ -153,7 +153,7 @@ class VedioClassifyEmbRNNAttention():
     self.vtitle_attention_out = tf.squeeze(tf.matmul(tf.transpose(self.vtitlernn, perm=[0, 2, 1]), self.vtitle_attention_score),
                 axis=-1)
 
-    # self.contentrnn (?, 200, 200)  (?, 200, 1)	 tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh)
+    # self.contentrnn (?, 200, 200)  (?, 200, 1)   tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh)
     self.content_attention_score = tf.nn.softmax(tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh))
     # self.content_attention_score (?, 200, 1)
     self.content_attention_out = tf.squeeze(tf.matmul(tf.transpose(self.contentrnn, perm=[0, 2, 1]), self.content_attention_score),
@@ -190,7 +190,29 @@ class VedioClassifyEmbRNNAttention():
       self.cross_entropy = self.cross_weight1 * self.cross_entropy1 + self.cross_weight2 * self.cross_entropy2
 
       self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
-      self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
+      #self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
+
+#      self.params = tf.trainable_variables()
+#      self.gradients = tf.gradients(self.cross_entropy, self.params)
+#      self.clipped_gradients, _ = tf.clip_by_global_norm(self.gradients, 5.0)
+#      self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+#      self.train_op = self.optimizer.apply_gradients(zip(self.clipped_gradients, self.params), global_step=self.global_step)
+
+      self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+      gradients, vriables = zip(*self.optimizer.compute_gradients(self.cross_entropy))
+      self.clipped_gradients, _ = tf.clip_by_global_norm(gradients, 1.25)
+      self.train_op = self.optimizer.apply_gradients(zip(gradients, vriables), global_step=self.global_step)
+
+#global_step = tf.Variable(0)
+#learning_rate = tf.train.exponential_decay(
+#    3.0, global_step, 3, 0.3, staircase=True)
+#optimizer2 = tf.train.GradientDescentOptimizer(learning_rate)
+#gradients, vriables = zip(*optimizer2.compute_gradients(goal))
+#gradients, _ = tf.clip_by_global_norm(gradients, 1.25)
+#train_step = optimizer2.apply_gradients(zip(gradients, vriables), 
+#                                       global_step=global_step)
+#      self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
+#      self.train_op = self.optimizer.apply_gradients(self.grads_and_vars, global_step=self.global_step)
 
     ##----------------------------acc compute
     with tf.name_scope('acc') as scope:
@@ -225,7 +247,7 @@ class VedioClassifyEmbRNNAttention():
 
         if (step > 0 and step % self.args['test_batch'] == 0):
           ## run optimizer
-          _, l, cl1, cl2, lr, pa1, la1, pa2, la2, acc1, acc2 = session.run([self.optimizer, \
+          _, l, cl1, cl2, lr, pa1, la1, pa2, la2, acc1, acc2 = session.run([self.train_op, \
                                                                             self.cross_entropy, self.cross_entropy1,
                                                                             self.cross_entropy2, self.learning_rate, \
                                                                             self.pred1_argmax, self.label1_argmax,
@@ -277,7 +299,7 @@ class VedioClassifyEmbRNNAttention():
 
         else:
           ## run optimizer
-          _, l = session.run([self.optimizer, self.cross_entropy], feed_dict=feed_dict)
+          _, l = session.run([self.train_op, self.cross_entropy], feed_dict=feed_dict)
 
         if (step > 0 and step % self.args['save_batch'] == 0):
           model_name = "dnn-model-" + self.timestamp + '-' + str(step)

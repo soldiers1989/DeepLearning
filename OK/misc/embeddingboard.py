@@ -7,12 +7,15 @@ from tensorflow.contrib.tensorboard.plugins import projector
 logdir='log'
 # load model
 df_train = pd.read_csv(
-    tf.gfile.Open('.'+os.sep+'data'+os.sep+'att.csv'),
+    tf.gfile.Open('.'+os.sep+'data'+os.sep+'all100000.csv'),
     skipinitialspace=True, 
     engine="python",
     skiprows=0)
-uinlist=df_train['uin']
-del df_train['uin']
+
+df_train.columns = ['key']+[str(x) for x in range(100)]
+
+uinlist=df_train['key']
+del df_train['key']
 embedding=df_train.values
 
 if not os.path.exists(logdir):
@@ -29,7 +32,7 @@ sess.run(set_x, feed_dict={place: embedding})
 
 # write labels
 tsvfile=os.path.join(logdir, 'metadata.tsv')
-with open(tsvfile, 'w') as f:
+with open(tsvfile, 'w', encoding='utf-8') as f:
     for uin in uinlist:
         f.write(str(uin) + '\n')
 
