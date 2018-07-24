@@ -34,6 +34,7 @@ param = {
   'total_batch': 1000,
   'decay_steps': 1000,
   'keep_prob': 0.5,
+  'grad_clip': 2,
 
   'emb_size': 100,
   'titlemax_size': 20,
@@ -123,7 +124,7 @@ class VedioClassifyEmbRNNAttention():
 
     with tf.name_scope('param') as scope:
       self.keep_prob = tf.placeholder(dtype="float", name='keep_prob')
-      self.global_step = tf.placeholder(dtype=np.int32, name="global_step")
+      self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
     ##----------------------------embedding layer
     with tf.device('/cpu:0'):
@@ -153,7 +154,7 @@ class VedioClassifyEmbRNNAttention():
     self.vtitle_attention_out = tf.squeeze(tf.matmul(tf.transpose(self.vtitlernn, perm=[0, 2, 1]), self.vtitle_attention_score),
                 axis=-1)
 
-    # self.contentrnn (?, 200, 200)  (?, 200, 1)	 tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh)
+    # self.contentrnn (?, 200, 200)  (?, 200, 1)   tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh)
     self.content_attention_score = tf.nn.softmax(tf.layers.dense(self.contentrnn, 1, activation=tf.nn.tanh))
     # self.content_attention_score (?, 200, 1)
     self.content_attention_out = tf.squeeze(tf.matmul(tf.transpose(self.contentrnn, perm=[0, 2, 1]), self.content_attention_score),
@@ -190,7 +191,13 @@ class VedioClassifyEmbRNNAttention():
       self.cross_entropy = self.cross_weight1 * self.cross_entropy1 + self.cross_weight2 * self.cross_entropy2
 
       self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
-      self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
+      #self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
+
+      self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+      self.tvars = tf.trainable_variables()
+      self.gvs = self.optimizer.compute_gradients(self.cross_entropy, self.tvars)
+      self.capped_gvs = [(tf.clip_by_norm(grad, self.args['grad_clip']), var) for grad, var in self.gvs]
+      self.train_op = self.optimizer.apply_gradients(self.capped_gvs, global_step=self.global_step)
 
     ##----------------------------acc compute
     with tf.name_scope('acc') as scope:
@@ -220,12 +227,12 @@ class VedioClassifyEmbRNNAttention():
           self.bizclass1: train_data['bizclass1'], self.bizclass2: train_data['bizclass2'],
           self.titleseg: train_data['titleseg'], self.vtitleseg: train_data['vtitleseg'], self.contentseg: train_data['contentseg'],
           self.titlelen: train_data['titlelen'], self.vtitlelen: train_data['vtitlelen'], self.contentlen: train_data['contentlen'],
-          self.global_step: step, self.keep_prob: self.args['keep_prob']
+          self.keep_prob: self.args['keep_prob']
         }
 
         if (step > 0 and step % self.args['test_batch'] == 0):
           ## run optimizer
-          _, l, cl1, cl2, lr, pa1, la1, pa2, la2, acc1, acc2 = session.run([self.optimizer, \
+          _, l, cl1, cl2, lr, pa1, la1, pa2, la2, acc1, acc2 = session.run([self.train_op, \
                                                                             self.cross_entropy, self.cross_entropy1,
                                                                             self.cross_entropy2, self.learning_rate, \
                                                                             self.pred1_argmax, self.label1_argmax,
@@ -247,7 +254,7 @@ class VedioClassifyEmbRNNAttention():
             self.bizclass1: test_data['bizclass1'], self.bizclass2: test_data['bizclass2'],
             self.titleseg: test_data['titleseg'], self.vtitleseg: test_data['vtitleseg'], self.contentseg: test_data['contentseg'],
             self.titlelen: test_data['titlelen'], self.vtitlelen: test_data['vtitlelen'], self.contentlen: test_data['contentlen'],
-            self.global_step: step, self.keep_prob: 1.0
+            self.keep_prob: 1.0
           }
 
           ## get acc
@@ -277,7 +284,7 @@ class VedioClassifyEmbRNNAttention():
 
         else:
           ## run optimizer
-          _, l = session.run([self.optimizer, self.cross_entropy], feed_dict=feed_dict)
+          _, l = session.run([self.train_op, self.cross_entropy], feed_dict=feed_dict)
 
         if (step > 0 and step % self.args['save_batch'] == 0):
           model_name = "dnn-model-" + self.timestamp + '-' + str(step)
@@ -300,7 +307,8 @@ class VedioClassifyEmbRNNAttention():
           self.bizclass1: predata['bizclass1'], self.bizclass2: predata['bizclass2'],
           self.titleseg: predata['titleseg'], self.vtitleseg: predata['vtitleseg'], self.contentseg: predata['contentseg'],
           self.titlelen: predata['titlelen'], self.vtitlelen: predata['vtitlelen'], self.contentlen: predata['contentlen'],
-          self.global_step: 0, self.keep_prob: 1.0
+          #self.global_step: 0, 
+          self.keep_prob: 1.0
         }
 
         p1, p2 = sess.run([self.pred1, self.pred2], feed_dict=feed_dict)

@@ -39,9 +39,10 @@ t.save('vedio.ann')
 gettop=600
 with open('sampleresult', 'w', encoding="utf-8") as outs:
   for loopii in range(idx):
+    qid=klist[loopii][:11]
     ids, dis = t.get_nns_by_item(loopii, gettop, include_distances=True)
     for ii in range(gettop):
       iinfo=list(klist[ids[ii]])
       iinfo.insert(11,'|')
-      outs.write(str(ii)+'|'+str(ids[ii])+'|'+str(dis[ii])+'|'+"".join(iinfo))
+      outs.write(str(qid)+'|'+str(ii)+'|'+str(ids[ii])+'|'+str(dis[ii])+'|'+"".join(iinfo))
       outs.write('\n')

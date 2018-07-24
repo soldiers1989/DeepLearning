@@ -34,6 +34,7 @@ param = {
   'total_batch': 1000,
   'decay_steps': 1000,
   'keep_prob': 0.5,
+  'grad_clip': 2,
 
   'emb_size': 100,
   'titlemax_size': 20,
@@ -69,7 +70,7 @@ param2 = {
   'filters': 200
 }
 
-#param.update(param2)
+param.update(param2)
 
 class VedioClassifyEmbRNNAttention():
   def __init__(self, args, vocab):
@@ -123,7 +124,7 @@ class VedioClassifyEmbRNNAttention():
 
     with tf.name_scope('param') as scope:
       self.keep_prob = tf.placeholder(dtype="float", name='keep_prob')
-      self.global_step = tf.placeholder(dtype=np.int32, name="global_step")
+      self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
     ##----------------------------embedding layer
     with tf.device('/cpu:0'):
@@ -192,27 +193,11 @@ class VedioClassifyEmbRNNAttention():
       self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
       #self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
 
-#      self.params = tf.trainable_variables()
-#      self.gradients = tf.gradients(self.cross_entropy, self.params)
-#      self.clipped_gradients, _ = tf.clip_by_global_norm(self.gradients, 5.0)
-#      self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
-#      self.train_op = self.optimizer.apply_gradients(zip(self.clipped_gradients, self.params), global_step=self.global_step)
-
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
-      gradients, vriables = zip(*self.optimizer.compute_gradients(self.cross_entropy))
-      self.clipped_gradients, _ = tf.clip_by_global_norm(gradients, 1.25)
-      self.train_op = self.optimizer.apply_gradients(zip(gradients, vriables), global_step=self.global_step)
-
-#global_step = tf.Variable(0)
-#learning_rate = tf.train.exponential_decay(
-#    3.0, global_step, 3, 0.3, staircase=True)
-#optimizer2 = tf.train.GradientDescentOptimizer(learning_rate)
-#gradients, vriables = zip(*optimizer2.compute_gradients(goal))
-#gradients, _ = tf.clip_by_global_norm(gradients, 1.25)
-#train_step = optimizer2.apply_gradients(zip(gradients, vriables), 
-#                                       global_step=global_step)
-#      self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
-#      self.train_op = self.optimizer.apply_gradients(self.grads_and_vars, global_step=self.global_step)
+      self.tvars = tf.trainable_variables()
+      self.gvs = self.optimizer.compute_gradients(self.cross_entropy, self.tvars)
+      self.capped_gvs = [(tf.clip_by_norm(grad, self.args['grad_clip']), var) for grad, var in self.gvs]
+      self.train_op = self.optimizer.apply_gradients(self.capped_gvs, global_step=self.global_step)
 
     ##----------------------------acc compute
     with tf.name_scope('acc') as scope:
@@ -242,7 +227,7 @@ class VedioClassifyEmbRNNAttention():
           self.bizclass1: train_data['bizclass1'], self.bizclass2: train_data['bizclass2'],
           self.titleseg: train_data['titleseg'], self.vtitleseg: train_data['vtitleseg'], self.contentseg: train_data['contentseg'],
           self.titlelen: train_data['titlelen'], self.vtitlelen: train_data['vtitlelen'], self.contentlen: train_data['contentlen'],
-          self.global_step: step, self.keep_prob: self.args['keep_prob']
+          self.keep_prob: self.args['keep_prob']
         }
 
         if (step > 0 and step % self.args['test_batch'] == 0):
@@ -269,7 +254,7 @@ class VedioClassifyEmbRNNAttention():
             self.bizclass1: test_data['bizclass1'], self.bizclass2: test_data['bizclass2'],
             self.titleseg: test_data['titleseg'], self.vtitleseg: test_data['vtitleseg'], self.contentseg: test_data['contentseg'],
             self.titlelen: test_data['titlelen'], self.vtitlelen: test_data['vtitlelen'], self.contentlen: test_data['contentlen'],
-            self.global_step: step, self.keep_prob: 1.0
+            self.keep_prob: 1.0
           }
 
           ## get acc
@@ -322,7 +307,8 @@ class VedioClassifyEmbRNNAttention():
           self.bizclass1: predata['bizclass1'], self.bizclass2: predata['bizclass2'],
           self.titleseg: predata['titleseg'], self.vtitleseg: predata['vtitleseg'], self.contentseg: predata['contentseg'],
           self.titlelen: predata['titlelen'], self.vtitlelen: predata['vtitlelen'], self.contentlen: predata['contentlen'],
-          self.global_step: 0, self.keep_prob: 1.0
+          #self.global_step: 0, 
+          self.keep_prob: 1.0
         }
 
         p1, p2 = sess.run([self.pred1, self.pred2], feed_dict=feed_dict)
