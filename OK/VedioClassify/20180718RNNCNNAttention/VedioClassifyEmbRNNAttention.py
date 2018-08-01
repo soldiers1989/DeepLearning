@@ -11,8 +11,8 @@ import time
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib import rnn
 from VedioClassifyInputAnsyEmbRNN import VedioClassifyBizuinInputAnsyEmb
+from tensorflow.contrib import rnn
 
 import TFBCUtils
 
@@ -34,7 +34,8 @@ param = {
   'total_batch': 1000,
   'decay_steps': 1000,
   'keep_prob': 0.5,
-  'grad_clip': 2,
+  'grad_clip': 1.5,
+  'lr': 0.0002,
 
   'emb_size': 100,
   'titlemax_size': 20,
@@ -49,7 +50,7 @@ param = {
 
 param2 = {
   'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classfy4/data/',
-  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classfy4/model2/',
+  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classifyrnn/modelatten/',
 
   'dataset': ['train0', 'train1', 'train2', 'train3', 'train4',
               'train5', 'train6', 'train7', 'train8'],
@@ -60,9 +61,9 @@ param2 = {
   'batch_size_test': 4096,
   'test_batch': 1000,
   'save_batch': 5000,
-  'total_batch': 1000000,
+  'total_batch': 60000,
   'decay_steps': 5000,
-  'keep_prob': 0.5,
+  'keep_prob': 0.6,
 
   'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/classfy4/w2v/model2.vec.proc',
   'vocab_size': 0,
@@ -78,6 +79,7 @@ class VedioClassifyEmbRNNAttention():
 
     now = datetime.datetime.now()
     self.timestamp = now.strftime("%Y%m%d%H%M%S")
+    self.args['modelpath']=os.path.join(self.args['modelpath'], self.timestamp)
     print(self.args)
 
     self.vocab=vocab
@@ -190,7 +192,7 @@ class VedioClassifyEmbRNNAttention():
       self.cross_weight2 = tf.constant(0.8, dtype='float')
       self.cross_entropy = self.cross_weight1 * self.cross_entropy1 + self.cross_weight2 * self.cross_entropy2
 
-      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
+      self.learning_rate = tf.train.exponential_decay(self.args['lr'], self.global_step, self.args['decay_steps'], 0.998)
       #self.optimizer = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cross_entropy)
 
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
@@ -238,7 +240,7 @@ class VedioClassifyEmbRNNAttention():
                                                                             self.pred1_argmax, self.label1_argmax,
                                                                             self.pred2_argmax, self.label2_argmax, \
                                                                             self.accuracy1, self.accuracy2], \
-                                                                           feed_dict=feed_dict)
+                                                                            feed_dict=feed_dict)
           print('[Train]\tIter:%d\tloss=%.6f\tloss1=%.6f\tloss2=%.6f\tlr=%.6f\taccuracy1=%.6f\taccuracy2=%.6f\tts=%s' %
                 (step, l / train_data['L'], cl1 / train_data['L'], cl2 / train_data['L'], lr, acc1, acc2, \
                  time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time()))), end='\n')
@@ -285,9 +287,12 @@ class VedioClassifyEmbRNNAttention():
         else:
           ## run optimizer
           _, l = session.run([self.train_op, self.cross_entropy], feed_dict=feed_dict)
+          if np.isnan(l):
+            print(str(step) + ':Nan error!')
+            sys.exit()
 
         if (step > 0 and step % self.args['save_batch'] == 0):
-          model_name = "dnn-model-" + self.timestamp + '-' + str(step)
+          model_name = "rnnatten-model-" + self.timestamp + '-' + str(step)
           if not os.path.exists(self.args['modelpath']):
             os.mkdir(self.args['modelpath'])
           self.saver.save(session, os.path.join(self.args['modelpath'], model_name))
@@ -376,11 +381,15 @@ if __name__ == "__main__":
         print('Using codecs.open')
         model.infer(readdata, outf)
 
-  else:
+  else:   
     readdata = VedioClassifyBizuinInputAnsyEmb(param)
-    readdata.start_ansyc()
-    model = VedioClassifyEmbRNNAttention(param, readdata.vocab)
-    model.train(readdata)
-    readdata.stop_and_wait_ansyc()
+    try:
+      readdata.start_ansyc()
+      model = VedioClassifyEmbRNNAttention(param, readdata.vocab)
+      model.train(readdata)
+    except:
+      print('Program is dead.')
+    finally:
+      readdata.stop_and_wait_ansyc()
 
 
