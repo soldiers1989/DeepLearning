@@ -143,7 +143,8 @@ class VedioClassifyEmbRNNAttention():
     self.contentrnn = self.create_rnn(self.contentbedding, self.contentlen, 'contentrnn')
 
     ##----------------------------attention layer
-    # Attention layer: produce a weight vector, and merge word-level features from each time step into a sentence-level feature vector, by multiplying the weight vector
+    # Attention layer: produce a weight vector, and merge word-level features from each time step into a sentence-level feature vector, 
+    # by multiplying the weight vector
     # tf.layers.dense adds a single layer to your network. The second argument is the number of neurons/nodes of the layer.
     # self.titlernn (?, 20, 200) (?, 20, 1) tf.layers.dense(self.titlernn, 1, activation=tf.nn.tanh)
     self.title_attention_score = tf.nn.softmax(tf.layers.dense(self.titlernn, 1, activation=tf.nn.tanh))    

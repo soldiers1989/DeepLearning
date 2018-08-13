@@ -52,7 +52,7 @@ param2 = {
   'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/smb/data/',
   'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/smb/model/',
 
-  'dataset': ['data1', 'data2', 'data3', 'data4', 'data5'],
+  'dataset': ['data1', 'data2', 'data3', 'data4'],
   'testset': [],
   'predset': [],
 
@@ -60,17 +60,17 @@ param2 = {
   'batch_size_test': 4096,
   'test_batch': 1000,
   'save_batch': 5000,
-  'total_batch': 100000,
+  'total_batch': 400000,
   'decay_steps': 5000,
   'keep_prob': 0.5,
 
   'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/smb/model2.vec.proc',
   'vocab_size': 283540,
-  'kernel_sizes': [2, 3, 4],
+  'kernel_sizes': [1, 2, 3, 4],
   'filters': 200
 }
 
-#param.update(param2)
+param.update(param2)
 
 class SMBEmb():
   def __init__(self, args, vocab):
@@ -169,10 +169,11 @@ class SMBEmb():
       self.stacked_cell = rnn_cell.MultiRNNCell([self.get_rnn_cell() for _ in range(self.args['layers'])])
       output, state = self.stacked_cell(self.Xitemembn2, tuple(self.State))
       self.final_state = state
+      self.output = tf.nn.l2_normalize(output, 1)
 
     ##----------------------------loss layer
     with tf.name_scope('loss') as scope:
-      self.logits = tf.matmul(output, self.Yitemembn2, transpose_b=True)
+      self.logits = tf.matmul(self.output, self.Yitemembn2, transpose_b=True)
       self.yhat=tf.nn.softmax(self.logits)
       self.cost = tf.reduce_mean(-tf.log(tf.diag_part(self.yhat)+1e-22))
 

@@ -25,7 +25,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import roc_auc_score
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 
-from dataprocessing import LoadDataVedio as VDATA
+from obsoleted.dataprocessing import LoadDataVedio as VDATA
 
 
 #################### Arguments ####################
