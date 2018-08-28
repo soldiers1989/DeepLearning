@@ -35,7 +35,9 @@ param = {
   'decay_steps': 1000,
   'keep_prob': 0.5,
   'grad_clip': 1.5,
-  'lr': 0.0002,
+  'lr': 0.0001,
+  'loss':'top1',  # 'cross-entropy'   'top1'
+  'final_act':'relu',  # 'cross-entropy'   'top1'
 
   'emb_size': 100,
   'layers': 2,
@@ -70,7 +72,7 @@ param2 = {
   'filters': 200
 }
 
-param.update(param2)
+#param.update(param2)
 
 class SMBEmb():
   def __init__(self, args, vocab):
@@ -78,7 +80,7 @@ class SMBEmb():
 
     now = datetime.datetime.now()
     self.timestamp = now.strftime("%Y%m%d%H%M%S")
-    print(self.args)
+    TFBCUtils.printmap(self.args)
 
     self.vocab=vocab
     self.output_dim = 28
@@ -86,10 +88,34 @@ class SMBEmb():
 
     self._init_graph()
 
+  def linear(self, X):
+    return X
+  def tanh(self, X):
+    return tf.nn.tanh(X)
+  def softmax(self, X):
+    return tf.nn.softmax(X)
+  def softmaxth(self, X):
+    return tf.nn.softmax(tf.tanh(X))
+  def relu(self, X):
+    return tf.nn.relu(X)
+  def sigmoid(self, X):
+    return tf.nn.sigmoid(X)    
+  
+  def cross_entropy(self, yhat):
+    return tf.reduce_mean(-tf.log(tf.diag_part(yhat)+1e-24))
+  def bpr(self, yhat):
+    yhatT = tf.transpose(yhat)
+    return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.diag_part(yhat)-yhatT)))
+  def top1(self, yhat):
+    yhatT = tf.transpose(yhat)
+    term1 = tf.reduce_mean(tf.nn.sigmoid(-tf.diag_part(yhat)+yhatT)+tf.nn.sigmoid(yhatT**2), axis=0)
+    term2 = tf.nn.sigmoid(tf.diag_part(yhat)**2) / self.args['batch_size']
+    return tf.reduce_mean(term1 - term2)
+
   def get_rnn_cell(self):
     cell = rnn_cell.GRUCell(self.args['emb_size'])
     return rnn_cell.DropoutWrapper(cell, output_keep_prob=self.keep_prob)
-
+    
   def create_rnn(self, x, seqlen, seq_max_len, name):
     with tf.name_scope(name) as scope:
       with tf.variable_scope(name):
@@ -172,10 +198,35 @@ class SMBEmb():
       self.output = tf.nn.l2_normalize(output, 1)
 
     ##----------------------------loss layer
-    with tf.name_scope('loss') as scope:
+    with tf.name_scope('loss') as scope:       
+      if self.args['loss'] == 'cross-entropy':
+        if self.args['final_act'] == 'tanh':
+          self.final_activation = self.softmaxth
+        else:
+          self.final_activation = self.softmax
+        self.loss_function = self.cross_entropy
+      elif self.args['loss'] == 'bpr':
+        if self.args['final_act'] == 'linear':
+          self.final_activation = self.linear
+        elif self.args['final_act'] == 'relu':
+          self.final_activation = self.relu
+        else:
+          self.final_activation = self.tanh
+        self.loss_function = self.bpr
+      elif self.args['loss'] == 'top1':
+        if self.args['final_act'] == 'linear':
+          self.final_activation = self.linear
+        elif self.args['final_act'] == 'relu':
+          self.final_activation = self.relu
+        else:
+          self.final_activation = self.tanh
+        self.loss_function = self.top1
+      else:
+        raise NotImplementedError         
+        
       self.logits = tf.matmul(self.output, self.Yitemembn2, transpose_b=True)
-      self.yhat=tf.nn.softmax(self.logits)
-      self.cost = tf.reduce_mean(-tf.log(tf.diag_part(self.yhat)+1e-22))
+      self.yhat = self.final_activation(self.logits)
+      self.cost = self.loss_function(self.yhat)
 
       self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.995)
 

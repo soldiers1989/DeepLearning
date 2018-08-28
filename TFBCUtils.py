@@ -9,6 +9,10 @@ import codecs
 import sys
 Py3 = sys.version_info[0] == 3
 
+def printmap(amap):
+  for key, values in amap.items():
+  	print('%s --> %s'%(str(key),str(values)))
+
 def tanh_y (x, w, b, keep_prob=1.0):
   y = tf.matmul(x, w) + b
   y = tf.nn.dropout(y, keep_prob)
@@ -272,10 +276,24 @@ class Vocab(object):
       embed[k] = v
     print('Generate numpy embed: %s' % str(embed.shape))
     return embed
+    
+  def getembed_without_zero(self, embed=None):
+    if embed is None:
+      embed = np.zeros( (self.vocabulary_size, self.emb_size), dtype = np.float32 )
+    for k, v in self.id2vectormap.items():
+      embed[k-1] = v
+    print('Generate numpy embed: %s' % str(embed.shape))
+    return embed
 
 def addvocabembedding(vocab, train_embed=1, emb_type=tf.float32, emb_name="emb"):
   embed=vocab.getembed()
   return tf.Variable(embed, trainable=train_embed, dtype=emb_type, name=emb_name)
+  
+def addvocabembedding_with_zero(vocab, train_embed=1, emb_type=tf.float32, emb_name="emb"):
+  embed=vocab.getembed_without_zero()
+  embed=tf.Variable(embed, trainable=train_embed, dtype=emb_type, name=emb_name)
+  embedding_zero = tf.constant(0.0, shape=[1, out_size], dtype=tf.float32)
+  return tf.concat([embedding_zero, embed], 0)
 
 def add_embedding_with_zero(in_size, out_size, train_embed=1, emb_type=tf.float32, emb_name="emb"):
   if (in_size < 1 or out_size < 1):

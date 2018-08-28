@@ -503,14 +503,14 @@ if __name__ == '__main__':
   print(vars(args))
 
   readdata = SMBAnsyInput(vars(args))
-#  readdata.start_ansyc()
-#  for ii in range(20):
-#    train_data = readdata.read_traindata_batch_ansyc()
-#    for jj in range(train_data['L']):
-#      print('restart: %d %d %d'%(ii, jj, train_data['restart'][jj]))
-#      print('Xlabel: %d %d %s'%(ii, jj, train_data['Xlabel'][jj]))
-#      print('Ylabel: %d %d %s'%(ii, jj, train_data['Ylabel'][jj]))
-#  readdata.stop_and_wait_ansyc()
+  readdata.start_ansyc()
+  for ii in range(20):
+    train_data = readdata.read_traindata_batch_ansyc()
+    for jj in range(train_data['L']):
+      print('restart: %d %d %d'%(ii, jj, train_data['restart'][jj]))
+      print('Xlabel: %d %d %s'%(ii, jj, train_data['Xlabel'][jj]))
+      print('Ylabel: %d %d %s'%(ii, jj, train_data['Ylabel'][jj]))
+  readdata.stop_and_wait_ansyc()
 
 #
 #  ret = readdata.read_preddata_batch(size=3)
