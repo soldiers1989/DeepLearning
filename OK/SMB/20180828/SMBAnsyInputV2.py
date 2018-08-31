@@ -251,7 +251,7 @@ class SMBInputData(object):
 
     return None
 
-class SMBAnsyInput(object):
+class SMBAnsyInputV2(object):
   def __init__(self, inputargs):
     self.args = inputargs
     print('SMBAnsyInput:', str(self.args))
@@ -502,7 +502,7 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(vars(args))
 
-  readdata = SMBAnsyInput(vars(args))
+  readdata = SMBAnsyInputV2(vars(args))
   readdata.start_ansyc()
   for ii in range(20):
     train_data = readdata.read_traindata_batch_ansyc()

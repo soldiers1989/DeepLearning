@@ -19,7 +19,6 @@ if Py3:
 else:
   from Queue import Queue
 
-
 class TxtFilesConcurrentRandomReaderV2(object):
   # Three files are needed in the path
   def __init__(self, args):
@@ -227,66 +226,68 @@ class SMBInputData(object):
     # l0527crq5q4|水库放了几天的水，终于把鱼王给盼了出来，在场的人可乐坏了|1530844231|98|2849|7628 1533 453 129800 229 6826 41264|35|1329 12646 7628|
     # l0561sbl5an|水库放水终于可以捕大鱼啦，爆爽|1530844234|98|2849|7628 22596 453 22 5934 277914|29|12646 7628
     self.line = line
-    self.splited = line.split('|')  # 8n+2
-    self.ok = True if len(self.splited) >= 10 and (len(self.splited) - 2) % 8 == 0 else False
+    self.splited = line.split('|')  # 9n+2
+    self.ok = True if len(self.splited) > 10 and (len(self.splited) - 2) % 9 == 0 else False
     self.uin = int(self.splited[0]) if self.ok else 0
     self.totalfields = int(self.splited[1]) if self.ok else 0
     self.readfield = 0
     self.fields = []
 
-    for ii in range(self.totalfields):
-      vid, vt, ts, c1, c2, vtn, _, tag = self.splited[2 + ii * 8:2 + (1 + ii) * 8]
-      if len(c1.strip()) == 0: c1 = '0'
-      if len(c2.strip()) == 0: c2 = '0'
-      if len(vtn.strip()) == 0: vtn = '0'
-      if len(tag.strip()) == 0: tag = '0'
-      vtn = [int(x) for x in vtn.strip().split(' ')]
-      tag = [int(x) for x in tag.strip().split(' ')]
-      self.fields.append((vid, vt, int(ts), int(c1), int(c2), vtn, tag))
+    try:
+      for ii in range(self.totalfields):
+        vid, vnid, vt, ts, c1, c2, vtn, _, tag = self.splited[2 + ii * 9:2 + (1 + ii) * 9]
+        if len(c1.strip()) == 0: c1 = '0'
+        if len(c2.strip()) == 0: c2 = '0'
+        if len(vtn.strip()) == 0: vtn = '0'
+        if len(tag.strip()) == 0: tag = '0'
+        vtn = [int(x) for x in vtn.strip().split(' ')]
+        tag = [int(x) for x in tag.strip().split(' ')]
+        self.fields.append((vid, int(vnid), vt, int(ts), int(c1), int(c2), vtn, tag))
+    except Exception as e:
+      print('str(Exception):\t'+str(Exception))
+      print('str(e):\t'+str(e))
+      print('repr(e):\t'+str(repr(e)))
+      print('e.line:\t'+line)
+      self.ok=False
+      self.totalfields=0
 
-  def nextitem(self):
+  def nexttrainitem(self):
     if self.ok and self.readfield < self.totalfields - 1:
       self.readfield += 1
       return (self.fields[self.readfield - 1], self.fields[self.readfield])
-
+    return None
+    
+  def nextpreditem(self):
+    if self.ok and self.readfield < self.totalfields:
+      self.readfield += 1
+      return self.fields[self.readfield - 1]
     return None
 
-class SMBAnsyInput(object):
+class SMBAnsyInputV2(object):
   def __init__(self, inputargs):
     self.args = inputargs
     print('SMBAnsyInput:', str(self.args))
     self.inputpath = inputargs['inputpath']
     if not self.inputpath.endswith(os.sep):
       self.inputpath += os.sep
-
+    
     self.dataset = []
     self.testset = []
-    self.predset = []
+    self.predvedioset = []
+    self.preduserset = []
 
-    if Py3:
-      if 'dataset' in inputargs:
-        self.dataset = [self.inputpath + item for item in inputargs['dataset']]
-        print('self.dataset %s' % self.dataset)
-      if 'testset' in inputargs:
-        self.testset = [self.inputpath + item for item in inputargs['testset']]
-        print('self.testset %s' % self.testset)
-      if 'predset' in inputargs:
-        self.predset = [self.inputpath + item for item in inputargs['predset']]
-        print('self.predset %s' % self.predset)
-
-    else:
-      if inputargs.has_key('dataset'):
-        self.dataset = [self.inputpath + item for item in inputargs['dataset']]
-        print('self.dataset %s' % self.dataset)
-      if inputargs.has_key('testset'):
-        self.testset = [self.inputpath + item for item in inputargs['testset']]
-        print('self.testset %s' % self.testset)
-      if inputargs.has_key('predset'):
-        self.predset = [self.inputpath + item for item in inputargs['predset']]
-        print('self.predset %s' % self.predset)
-
-    self.batch_size = inputargs.get('batch_size', 0)
-    self.batch_size_test = inputargs.get('batch_size_test', self.batch_size * 2)
+    if 'dataset' in inputargs:
+      self.dataset = [self.inputpath + item for item in inputargs['dataset']]
+      print('self.dataset %s' % self.dataset)
+    if 'testset' in inputargs:
+      self.testset = [self.inputpath + item for item in inputargs['testset']]
+      print('self.testset %s' % self.testset)
+    if 'predvedioset' in inputargs:
+      self.predvedioset = [self.inputpath + item for item in inputargs['predvedioset']]
+      print('self.predvedioset %s' % self.predvedioset)
+    if 'preduserset' in inputargs:
+      self.preduserset = [self.inputpath + item for item in inputargs['preduserset']]
+      print('self.preduserset %s' % self.preduserset)
 
     self.vocab = Vocab(inputargs['vocab'], inputargs['emb_size'], inputargs['vocab_size'])
     self.vocab_size = inputargs['vocab_size']
@@ -298,9 +299,12 @@ class SMBAnsyInput(object):
 
     self.testdata = TxtFilesRandomReader(files=self.testset, shuffleFile=inputargs.get('shuffle_file', True))
 
-    self.preddata = TxtFilesRandomReader(files=self.predset, shuffleFile=False, shuffleRecord=False,
+    self.predvediodata = TxtFilesRandomReader(files=self.predvedioset, shuffleFile=False, shuffleRecord=False,
                                          epochs=1)
 
+    self.batch_size = inputargs.get('batch_size', 0)
+    self.batch_size_test = inputargs.get('batch_size_test', self.batch_size * 2)
+    
     self.ansy_run = True
     self.traindataqueue = Queue(maxsize=5)
     self.testdataqueue = Queue(maxsize=3)
@@ -309,10 +313,12 @@ class SMBAnsyInput(object):
 
     self.readlock = threading.Lock()
 
-    self.level1_size = 28
-    self.level2_size = 174
-
-    self.items = []
+    self.items = []  
+    self.defaultuseritem = None 
+    self.useritems = []
+    
+    if len(self.preduserset)>0:
+      self.reset_preduserset()
 
   def do_ansyc_trainset(self):
     print('Begin thread for traindata.read_batch')
@@ -379,24 +385,19 @@ class SMBAnsyInput(object):
   def read_testdata_batch_ansyc(self):
     return self.testdataqueue.get()
 
-  def has_predset(self):
-    return len(self.predset) > 0
-
-  def reset_predset(self):
-    self.preddata = TxtFilesRandomReader(files=self.predset, shuffleFile=False, shuffleRecord=False,
-                                         epochs=1)
-
-  def processing_item(self, item):
-    # ('w07004o8k5u', '多年未清理的水坑抽干水，发现罕见的大鱼，引全村人来围观', 1530844127, 98, 4583, [756, 2860, 43687, 219692, 149, 4038, 5934, 32737, 3329], [12646, 1860, 47061])
-    linelen = len(item[5])
-    if (linelen < self.titlemaxsize): item[5].extend([0] * (self.titlemaxsize - linelen))
-    cat1 = 0 if item[3] > self.vocab_size else item[3]
-    cat2 = 0 if item[4] > self.vocab_size else item[4]
-    title = [x if x <= self.vocab_size else 0 for x in item[5][:self.titlemaxsize]]
-    return item[0] + item[1], [cat1, cat2], np.array(title), min(linelen, self.titlemaxsize)
+  def processing_item(self, item):    
+    # (vid, vnid, vt, int(ts), int(c1), int(c2), vtn, tag)
+    # ('w07004o8k5u', 8, '多年未清理的水坑抽干水，发现罕见的大鱼，引全村人来围观', 1530844127, 98, 4583, [756, 2860, 43687, 219692, 149, 4038, 5934, 32737, 3329], [12646, 1860, 47061])
+    linelen = len(item[6])
+    if (linelen < self.titlemaxsize): item[6].extend([0] * (self.titlemaxsize - linelen))
+    cat1 = 0 if item[4] > self.vocab_size else item[4]
+    cat2 = 0 if item[5] > self.vocab_size else item[5]
+    title = [x if x <= self.vocab_size else 0 for x in item[6][:self.titlemaxsize]]
+    return item[0] + '|' + item[2], item[1], [cat1, cat2], np.array(title), min(linelen, self.titlemaxsize)
 
   def processing_batch_train(self):
     Xlabel, Ylabel = [], []
+    Xid, Yid = [], []
     Xbizclass, Ybizclass = [], []
     Xvtitleseg, Yvtitleseg = [], []
     Xvtitlelen, Yvtitlelen = [], []
@@ -404,7 +405,7 @@ class SMBAnsyInput(object):
 
     for ii in range(len(self.items)):
       restartf = 0
-      item = self.items[ii].nextitem()
+      item = self.items[ii].nexttrainitem()
       while item is None:
         with self.readlock:
           sdata = SMBInputData(self.traindata.read_batch(1)[0])
@@ -412,54 +413,114 @@ class SMBAnsyInput(object):
             print('IN while not sdata.ok in processing_batch_train')
             sdata = SMBInputData(self.traindata.read_batch(1)[0])
           self.items[ii] = sdata
-          item = self.items[ii].nextitem()
+          item = self.items[ii].nexttrainitem()
           restartf = 1
 
-      label, bizclass, vtitleseg, vtitlelen = self.processing_item(item[0])
-      Xlabel.append(label);
-      Xbizclass.append(bizclass);
-      Xvtitleseg.append(vtitleseg);
-      Xvtitlelen.append(vtitlelen)
+      label, vnid, bizclass, vtitleseg, vtitlelen = self.processing_item(item[0])
+      Xlabel.append(label); Xid.append(vnid); Xbizclass.append(bizclass);
+      Xvtitleseg.append(vtitleseg); Xvtitlelen.append(vtitlelen)
 
-      label, bizclass, vtitleseg, vtitlelen = self.processing_item(item[1])
-      Ylabel.append(label);
-      Ybizclass.append(bizclass);
-      Yvtitleseg.append(vtitleseg);
-      Yvtitlelen.append(vtitlelen)
+      label, vnid, bizclass, vtitleseg, vtitlelen = self.processing_item(item[1])
+      Ylabel.append(label); Yid.append(vnid); Ybizclass.append(bizclass);
+      Yvtitleseg.append(vtitleseg); Yvtitlelen.append(vtitlelen)
 
       restart.append(restartf)
 
     return {'L': len(Xlabel) if len(Ylabel) == len(Xlabel) and len(Xlabel) == len(Yvtitlelen) else 0,
             'Xlabel': Xlabel, 'Ylabel': Ylabel,
+            'Xid': Xid, 'Yid': Yid,
             'Xbizclass': Xbizclass, 'Ybizclass': Ybizclass,
             'Xvtitleseg': Xvtitleseg, 'Yvtitleseg': Yvtitleseg,
             'Xvtitlelen': Xvtitlelen, 'Yvtitlelen': Yvtitlelen,
             'restart': restart}
+    
+  def has_preduserset(self):
+    return len(self.preduserset) > 0
+    
+  def get_predusernext(self):
+    while True:
+      data=self.preduserdata.read_batch(1)
+      if len(data)==0: 
+        if self.defaultuseritem is None: 
+          return 2, None
+        else:
+          return 1, SMBInputData(self.defaultuseritem)
+      else:
+        sdata = SMBInputData(data[0])
+        if sdata.ok:
+          if self.defaultuseritem is None: 
+            self.defaultuseritem = data[0]
+          return 0, sdata
 
-  def read_preddata_batch(self, size=256):
+  def reset_preduserset(self):
+    self.preduserdata = TxtFilesRandomReader(files=self.preduserset, shuffleFile=False, shuffleRecord=False,
+                                         epochs=1)    
+    for ii in range(self.batch_size):
+      with self.readlock:
+        scene, item = self.get_predusernext()
+        if scene==2: break
+        self.useritems.append((scene, item))
+                                         
+  def read_preduserdata_batch(self):    
+    Xlabel, Xuin, Xbizclass, Xvtitleseg, Xvtitlelen, restart, Xpadding = [],[],[],[],[],[],[]
+    allpaddingflag = 1
+
+    for ii in range(len(self.useritems)):
+      restartf = 0
+      padding, item = self.useritems[ii]
+      uin=item.uin
+      item = item.nextpreditem()
+      while item is None:
+        with self.readlock:
+          padding, item = self.get_predusernext()
+          uin=item.uin
+          self.useritems[ii] = (padding, item)
+          item = item.nextpreditem()
+          restartf = 1
+
+      label, vnid, bizclass, vtitleseg, vtitlelen = self.processing_item(item)
+      Xlabel.append(str(vnid)+'|'+label); Xuin.append(uin);
+      Xbizclass.append(bizclass); Xvtitleseg.append(vtitleseg); Xvtitlelen.append(vtitlelen)
+      restart.append(restartf), Xpadding.append(padding)
+      
+      if padding==0: allpaddingflag=0 
+
+    return {'L': len(Xlabel) if allpaddingflag==0 else 0,
+            'label': Xlabel, 'uin': Xuin,
+            'bizclass': Xbizclass, 'vtitleseg': Xvtitleseg, 'vtitlelen': Xvtitlelen,
+            'restart': restart, 'padding': Xpadding}
+              
+  def has_predvedioset(self):
+    return len(self.predvedioset) > 0
+
+  def reset_predvedioset(self):
+    self.predvediodata = TxtFilesRandomReader(files=self.predvedioset, shuffleFile=False, shuffleRecord=False,
+                                         epochs=1)  
+                                         
+  def read_predvediodata_batch(self, size=256):
     Xlabel = []
     Xbizclass = []
     Xvtitleseg = []
     Xvtitlelen = []
     
-    lines = self.preddata.read_batch(size)
+    lines = self.predvediodata.read_batch(size)
     for line in lines:      
-      #a00162kms3x|苏州好风光|220|1916|3995 4286|2|0
-      #a0023gr6q9c|晨光诵书 传递爱心|514|2484|28016 0 2324 2203|4|51070 40285
+      #a00162kms3x|20160|苏州好风光|0|220|1916|3995 4286|2|0
+      #x066288y1or|2017760|真的谁都希望自己越活越年轻|0|676|32360|163 191 27 70653 786|5|51070 40285
       fields = line.split('|')
-      if len(fields)!=7: continue
+      if len(fields)!=9: continue
         
-      cat1 = int(fields[2])
+      cat1 = int(fields[4])
       if cat1 > self.vocab_size: cat1=0
-      cat2 = int(fields[3])
+      cat2 = int(fields[5])
       if cat2 > self.vocab_size: cat2=0
         
-      titleids=[int(x) for x in fields[4].strip().split(' ') if x.strip() != '']
+      titleids=[int(x) for x in fields[6].strip().split(' ') if x.strip() != '']
       linelen=len(titleids)      
       if (linelen < self.titlemaxsize): titleids.extend([0] * (self.titlemaxsize - linelen))
       vtitleseg = [x if x <= self.vocab_size else 0 for x in titleids[:self.titlemaxsize]]
         
-      Xlabel.append(fields[0] + fields[1])
+      Xlabel.append('|'.join(fields[0:3]))
       Xbizclass.append([cat1, cat2])
       Xvtitleseg.append(vtitleseg);
       Xvtitlelen.append(min(linelen, self.titlemaxsize))    
@@ -476,7 +537,6 @@ def str2bool(v):
   else:
     raise argparse.ArgumentTypeError('Boolean value expected.')
 
-
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description="Run Reindex.")
   parser.add_argument('--inputpath', default='data/', required=False,
@@ -487,11 +547,13 @@ if __name__ == '__main__':
                       help='Vocab file path.')
   parser.add_argument('--vocab_size', type=int, default=1000,
                       help='Vocab size.')
-  parser.add_argument('--dataset', nargs='+', default=['smb.data.sample', 'smb.data.sample2'],
+  parser.add_argument('--dataset', nargs='+', default=['smbtrainsample.v2', 'smbtrainsample.v2'],
                       help='Choose a train dataset.')
-  parser.add_argument('--testset', nargs='*', default=['smb.data.sample', 'smb.data.sample2'],
+  parser.add_argument('--testset', nargs='*', default=['smbtrainsample.v2', 'smbtrainsample.v2'],
                       help='Choose a test dataset.')
-  parser.add_argument('--predset', nargs='*', default=['pred.sample'],
+  parser.add_argument('--predvedioset', nargs='+', default=['smbvedio.v2'],
+                      help='Choose a pred dataset.')
+  parser.add_argument('--preduserset', nargs='+', default=['smbuser.v2'],
                       help='Choose a pred dataset.')
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
@@ -502,20 +564,26 @@ if __name__ == '__main__':
   args = parser.parse_args()
   print(vars(args))
 
-  readdata = SMBAnsyInput(vars(args))
-  readdata.start_ansyc()
-  for ii in range(20):
-    train_data = readdata.read_traindata_batch_ansyc()
-    for jj in range(train_data['L']):
-      print('restart: %d %d %d'%(ii, jj, train_data['restart'][jj]))
-      print('Xlabel: %d %d %s'%(ii, jj, train_data['Xlabel'][jj]))
-      print('Ylabel: %d %d %s'%(ii, jj, train_data['Ylabel'][jj]))
-  readdata.stop_and_wait_ansyc()
+  readdata = SMBAnsyInputV2(vars(args))
+#  readdata.start_ansyc()
+#  for ii in range(20):
+#    train_data = readdata.read_traindata_batch_ansyc()
+#    print(' ')
+#    for jj in range(train_data['L']):
+#      print('restart: %d %d %d'%(ii, jj, train_data['restart'][jj]))
+#      print('Xlabel: %d %d %s'%(ii, jj, train_data['Xlabel'][jj]))
+#      print('Ylabel: %d %d %s'%(ii, jj, train_data['Ylabel'][jj]))
+#  readdata.stop_and_wait_ansyc()
 
 #
-#  ret = readdata.read_preddata_batch(size=3)
+#  ret = readdata.read_predvediodata_batch(size=3)
 #  if ret['L']>0:
 #    print(ret)
+
+  ret = readdata.read_preduserdata_batch()
+  while ret['L']>0:
+    print(ret)
+    ret = readdata.read_preduserdata_batch()
 
 #  aSMBInputData = SMBInputData('815470608|3|w07004o8k5u|多年未清理的水坑抽干水，发现罕见的大鱼，引全村人来围观|1530844127|98|4583|756 2860 43687 219692 149 4038 5934 32737 3329|46|12646 1860 47061|l0527crq5q4|水库放了几天的水，终于把鱼王给盼了出来，在场的人可乐坏了|1530844231|98|2849|7628 1533 453 129800 229 6826 41264|35|1329 12646 7628|l0561sbl5an|水库放水终于可以捕大鱼啦，爆爽|1530844234|98|2849|7628 22596 453 22 5934 277914|29|12646 7628')
 #  print('aSMBInputData '+str(aSMBInputData.ok))

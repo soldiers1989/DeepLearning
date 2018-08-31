@@ -12,7 +12,7 @@ import time
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn_cell
-from SMBAnsyInput import SMBAnsyInput
+from SMBAnsyInputV2 import SMBAnsyInput
 
 import TFBCUtils
 

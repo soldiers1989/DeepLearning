@@ -12,7 +12,7 @@ import time
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn_cell
-from SMBAnsyInputV2 import SMBAnsyInput
+from SMBAnsyInputV2 import SMBAnsyInputV2
 
 import TFBCUtils
 
@@ -22,8 +22,8 @@ if not Py3: import codecs
 param = {
   'inputpath': 'data/',
   'modelpath': 'model/',
-  'dataset': ['smb.data.sample', 'smb.data.sample2'],
-  'testset': ['smb.data.sample'],
+  'dataset': ['smbtrainsample.v2', 'smbtrainsample.v2'],
+  'testset': ['smbtrainsample.v2'],
   'predset': [],
 
   'shuffle_file': True,
@@ -35,7 +35,9 @@ param = {
   'decay_steps': 1000,
   'keep_prob': 0.5,
   'grad_clip': 1.5,
-  'lr': 0.0002,
+  'lr': 0.0001,
+  'loss':'top1',  # 'cross-entropy'   'top1'
+  'final_act':'relu',  # 'cross-entropy'   'top1'
 
   'emb_size': 100,
   'layers': 2,
@@ -44,23 +46,24 @@ param = {
 
   'vocab': 'data/model2.vec.proc',
   'vocab_size': 1000,
-  'kernel_sizes': [1, 2, 3],
-  'filters': 4
+  'kernel_sizes': [2, 3],
+  'filters': 2
 }
 
 param2 = {
-  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/smb/data/',
-  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/smb/modelcnn/',
+  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/smbv2/20180828/train/',
+  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/mpvedio/smbv2/20180828/model/',
 
-  'dataset': ['data1', 'data2', 'data3', 'data4', 'data5'],
+  'dataset': ['part-00000','part-00002','part-00004','part-00006','part-00008','part-00010','part-00012','part-00014','part-00016','part-00018',\
+              'part-00001','part-00003','part-00005','part-00007','part-00009','part-00011','part-00013','part-00015','part-00017','part-00019'],
   'testset': [],
   'predset': [],
 
-  'batch_size': 64,
+  'batch_size': 128,
   'batch_size_test': 4096,
   'test_batch': 1000,
   'save_batch': 5000,
-  'total_batch': 100000,
+  'total_batch': 400000,
   'decay_steps': 5000,
   'keep_prob': 0.5,
 
@@ -69,6 +72,7 @@ param2 = {
   'kernel_sizes': [1, 2, 3, 4],
   'filters': 200
 }
+
 #param.update(param2)
 
 class SMBEmb():
@@ -77,13 +81,37 @@ class SMBEmb():
 
     now = datetime.datetime.now()
     self.timestamp = now.strftime("%Y%m%d%H%M%S")
-    print(self.args)
+    TFBCUtils.printmap(self.args)
 
     self.vocab=vocab
     self.output_dim = 28
     self.output_dim2 = 174
 
     self._init_graph()
+
+  def linear(self, X):
+    return X
+  def tanh(self, X):
+    return tf.nn.tanh(X)
+  def softmax(self, X):
+    return tf.nn.softmax(X)
+  def softmaxth(self, X):
+    return tf.nn.softmax(tf.tanh(X))
+  def relu(self, X):
+    return tf.nn.relu(X)
+  def sigmoid(self, X):
+    return tf.nn.sigmoid(X)
+
+  def cross_entropy(self, yhat):
+    return tf.reduce_mean(-tf.log(tf.diag_part(yhat)+1e-24))
+  def bpr(self, yhat):
+    yhatT = tf.transpose(yhat)
+    return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.diag_part(yhat)-yhatT)))
+  def top1(self, yhat):
+    yhatT = tf.transpose(yhat)
+    term1 = tf.reduce_mean(tf.nn.sigmoid(-tf.diag_part(yhat)+yhatT)+tf.nn.sigmoid(yhatT**2), axis=0)
+    term2 = tf.nn.sigmoid(tf.diag_part(yhat)**2) / self.args['batch_size']
+    return tf.reduce_mean(term1 - term2)
 
   def get_rnn_cell(self):
     cell = rnn_cell.GRUCell(self.args['emb_size'])
@@ -136,53 +164,30 @@ class SMBEmb():
     ##----------------------------embedding layer
     with tf.device('/cpu:0'):
       with tf.name_scope('embedding') as scope:
-        self.embedding = TFBCUtils.addvocabembedding(self.vocab)
+        self.embedding = TFBCUtils.addvocabembedding_with_zero(self.vocab)
 
         self.Xbizclassembedding1 = tf.nn.embedding_lookup(self.embedding, self.Xbizclass)
         self.Xbizclassembedding = tf.reshape(self.Xbizclassembedding1, [-1, self.args['emb_size'] * 2])
-        
-        self.Xvtitleembedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.Xvtitleseg), -1)
+        self.Xvtitleembedding = tf.nn.embedding_lookup(self.embedding, self.Xvtitleseg)
 
         self.Ybizclassembedding1 = tf.nn.embedding_lookup(self.embedding, self.Ybizclass)
         self.Ybizclassembedding = tf.reshape(self.Ybizclassembedding1, [-1, self.args['emb_size'] * 2])
-        
-        self.Yvtitleembedding = tf.expand_dims(tf.nn.embedding_lookup(self.embedding, self.Yvtitleseg), -1)
+        self.Yvtitleembedding = tf.nn.embedding_lookup(self.embedding, self.Yvtitleseg)
 
-    ##----------------------------conv layer
-    with tf.name_scope('conv') as scope:
-      self.convparam = []
-      self.Xconvresult = []
-      self.Yconvresult = []
-      for kernel_sizes in self.args['kernel_sizes']:
-        cnn_w0 = tf.Variable(
-          tf.random_uniform([kernel_sizes, self.args['emb_size'], 1, self.args['filters']], -0.2, 0.2),
-          dtype='float32', name="cnn_%d_w0" % kernel_sizes)
-        cnn_b0 = tf.Variable(tf.constant(0.00001, shape=[self.args['filters']]),
-                             name="cnn_%d_b0" % kernel_sizes)
-        self.convparam.append((cnn_w0, cnn_b0))
-
-        Xvtitlecnn = tf.add(tf.nn.conv2d(self.Xvtitleembedding, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
-        Xvtitlecnn = tf.nn.relu(Xvtitlecnn)
-        Xvtitlemax = tf.nn.max_pool(Xvtitlecnn, [1, self.args['titlemax_size'] - kernel_sizes + 1, 1, 1], [1, 1, 1, 1],
-                                  padding='VALID')
-        Xvtitlemax = tf.squeeze(Xvtitlemax, [1, 2])
-        self.Xconvresult.append(Xvtitlemax)
-
-        Yvtitlecnn = tf.add(tf.nn.conv2d(self.Yvtitleembedding, cnn_w0, [1, 1, 1, 1], padding='VALID'), cnn_b0)
-        Yvtitlecnn = tf.nn.relu(Yvtitlecnn)
-        Yvtitlemax = tf.nn.max_pool(Yvtitlecnn, [1, self.args['titlemax_size'] - kernel_sizes + 1, 1, 1], [1, 1, 1, 1],
-                                  padding='VALID')
-        Yvtitlemax = tf.squeeze(Yvtitlemax, [1, 2])
-        self.Yconvresult.append(Yvtitlemax) 
+    ##----------------------------rnn layer
+    with tf.name_scope('rnntitle') as scope:
+      self.title_lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(self.args['emb_size'])
+      self.Xvtitlernn = self.create_rnn(self.Xvtitleembedding, self.Xvtitlelen, self.args['titlemax_size'], 'vtitlernn')
+      self.Yvtitlernn = self.create_rnn(self.Yvtitleembedding, self.Yvtitlelen, self.args['titlemax_size'], 'vtitlernn')
 
     ##----------------------------concat layer
-    with tf.name_scope('concat') as scope:  
-      self.Xconcat_item = tf.concat([self.Xbizclassembedding] + self.Xconvresult, 1)
-      self.Yconcat_item = tf.concat([self.Ybizclassembedding] + self.Yconvresult, 1)
+    with tf.name_scope('concat') as scope:  #  [?,22,100], [300,100]
+      self.Xconcat_item = tf.concat([self.Xbizclassembedding, self.Xvtitlernn], 1)
+      self.Yconcat_item = tf.concat([self.Ybizclassembedding, self.Yvtitlernn], 1)
 
     ##----------------------------fc layer
     with tf.name_scope('fc') as scope:
-      level1_dim = 2 * self.args['emb_size'] + self.args['filters'] * len(self.args['kernel_sizes'])
+      level1_dim = 3 * self.args['emb_size']
       self.fc1_w0, self.fc1_b0 = TFBCUtils.create_w_b(level1_dim, self.args['emb_size'], w_name="fc1_w0", b_name="fc1_b0")
       self.Xitemembn2 = tf.nn.l2_normalize(tf.nn.relu(tf.matmul(self.Xconcat_item, self.fc1_w0) + self.fc1_b0), 1)
       self.Yitemembn2 = tf.nn.l2_normalize(tf.nn.relu(tf.matmul(self.Yconcat_item, self.fc1_w0) + self.fc1_b0), 1)
@@ -191,14 +196,42 @@ class SMBEmb():
       self.stacked_cell = rnn_cell.MultiRNNCell([self.get_rnn_cell() for _ in range(self.args['layers'])])
       output, state = self.stacked_cell(self.Xitemembn2, tuple(self.State))
       self.final_state = state
+      self.output = tf.nn.l2_normalize(output, 1)
 
     ##----------------------------loss layer
     with tf.name_scope('loss') as scope:
-      self.logits = tf.matmul(output, self.Yitemembn2, transpose_b=True)
-      self.yhat=tf.nn.softmax(self.logits)
-      self.cost = tf.reduce_mean(-tf.log(tf.diag_part(self.yhat)+1e-22))
+      if self.args['loss'] == 'cross-entropy':
+        if self.args['final_act'] == 'tanh':
+          self.final_activation = self.softmaxth
+        else:
+          self.final_activation = self.softmax
+        self.loss_function = self.cross_entropy
+      elif self.args['loss'] == 'bpr':
+        if self.args['final_act'] == 'linear':
+          self.final_activation = self.linear
+        elif self.args['final_act'] == 'relu':
+          self.final_activation = self.relu
+        else:
+          self.final_activation = self.tanh
+        self.loss_function = self.bpr
+      elif self.args['loss'] == 'top1':
+        if self.args['final_act'] == 'linear':
+          self.final_activation = self.linear
+        elif self.args['final_act'] == 'relu':
+          self.final_activation = self.relu
+        else:
+          self.final_activation = self.tanh
+        self.loss_function = self.top1
+      else:
+        raise NotImplementedError
 
-      self.learning_rate = tf.train.exponential_decay(0.0002, self.global_step, self.args['decay_steps'], 0.98)
+      self.logits = tf.matmul(self.output, self.Yitemembn2, transpose_b=True)
+      self.yhat = self.final_activation(self.logits)
+      self.cost = self.loss_function(self.yhat)
+
+      self.learning_rate = tf.train.exponential_decay(0.00015, self.global_step, self.args['decay_steps'], 0.995)
+      #self.learning_rate = tf.train.cosine_decay_restarts(0.0002, self.global_step, self.args['decay_steps'])
+      #self.learning_rate =  tf.constant(0.0001)
 
       self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
       self.tvars = tf.trainable_variables()
@@ -236,7 +269,7 @@ class SMBEmb():
           ## run optimizer
           _, l, state, lr = session.run([self.train_op, self.cost, self.final_state, self.learning_rate ], feed_dict=feed_dict)
           ll+=l
-          print('[Train]\tIter:%d\tloss=%.6f\tlr=%.6f'%(step, ll, lr))
+          print('[Train]\tIter:%d\tloss=%.6f\tlr=%.6f\tts=%s'%(step, ll, lr, time.strftime('%m-%d-%Y %H:%M:%S', time.localtime(time.time()))))
           ll=0
         else:
           _, l, state = session.run([self.train_op, self.cost, self.final_state ], feed_dict=feed_dict)
@@ -248,40 +281,65 @@ class SMBEmb():
             os.mkdir(self.args['modelpath'])
           self.saver.save(session, os.path.join(self.args['modelpath'], model_name))
 
-  def infer(self, readdata, outf):
+  def infervedio(self, readdata, outf):
     with tf.Session() as sess:
       self.saver = tf.train.Saver()
       print('Loading model:'+self.args['ckpt'])
-      #self.saver.restore(sess, tf.train.latest_checkpoint(self.args['ckpt']))
       self.saver.restore(sess, self.args['ckpt'])
-
-      predata = readdata.read_preddata_batch()
-
+      
+      predata = readdata.read_predvediodata_batch(self.args['batch_size'])
       while predata['L'] > 0:
         feed_dict = {
-          self.lda1000: predata['lda1000'], self.lda2000: predata['lda2000'], self.lda5000: predata['lda5000'],
-          self.bizclass1: predata['bizclass1'], self.bizclass2: predata['bizclass2'],
-          self.titleseg: predata['titleseg'], self.vtitleseg: predata['vtitleseg'], self.contentseg: predata['contentseg'],
-          self.titlelen: predata['titlelen'], self.vtitlelen: predata['vtitlelen'], self.contentlen: predata['contentlen'],
-          self.global_step: 0
+          self.Xbizclass: predata['Xbizclass'], self.Xvtitleseg: predata['Xvtitleseg'], self.Xvtitlelen: predata['Xvtitlelen'],
+          self.keep_prob: 1
         }
 
-        p1, p2 = sess.run([self.pred1, self.pred2], feed_dict=feed_dict)
-        for k, r1, r2 in zip(predata['addinfo'], p1, p2):
-          maxidx1=np.argmax(r1)
-          maxidx2=np.argmax(r2)
-          outf.write('%d|%f|%d|%f|'%(maxidx1, r1[maxidx1], maxidx2, r2[maxidx2]))
-          outf.write(','.join([str(x) for x in r1]))
-          outf.write('|')
-          outf.write(','.join([str(x) for x in r2]))
-          r1[maxidx1]=0; r2[maxidx2]=0;
-          maxidx1=np.argmax(r1)
-          maxidx2=np.argmax(r2)
-          outf.write('|%d|%f|%d|%f|'%(maxidx1, r1[maxidx1], maxidx2, r2[maxidx2]))
-          k=k.replace('_', '|', 1)
-          outf.write( k + '\n')
+        vvec = sess.run([self.Xitemembn2, ], feed_dict=feed_dict)
+        for k, r1 in zip(predata['Xlabel'], vvec[0]):
+          outf.write( k.replace(' ', '') )
+          outf.write( ' ' )
+          outf.write( ' '.join([str(x) for x in r1]) )
+          outf.write( '\n' )
 
-        predata = readdata.read_preddata_batch()
+        predata = readdata.read_predvediodata_batch(self.args['batch_size'])
+        
+  def inferuser(self, readdata, outf):
+    with tf.Session() as sess:
+      self.saver = tf.train.Saver()
+      print('Loading model:'+self.args['ckpt'])
+      self.saver.restore(sess, self.args['ckpt'])
+      
+      state = [np.zeros([self.args['batch_size'], self.args['emb_size']], dtype=np.float32) for _ in range(self.args['layers'])]
+      itemidx = [0]*self.args['batch_size']
+
+      predata = readdata.read_preduserdata_batch()
+      while predata['L'] > 0:
+        for ii in range(predata['L']):
+          if predata['restart'][ii]==1:
+            itemidx[ii] = 0
+            for jj in range(self.args['layers']):
+              state[jj][ii] = 0
+          itemidx[ii]+=1
+        
+        feed_dict = {
+          self.Xbizclass: predata['bizclass'], self.Xvtitleseg: predata['vtitleseg'], self.Xvtitlelen: predata['vtitlelen'],
+          self.keep_prob: 1
+        }        
+        for jj in range(self.args['layers']):  feed_dict[self.State[jj]] = state[jj]
+
+        state, uvec = sess.run([self.final_state, self.output], feed_dict=feed_dict)
+        for idx, p, u, k, r1 in zip(itemidx, predata['padding'], predata['uin'], predata['label'], uvec):
+          if p==1: continue
+          outf.write( str(u) + '|' + str(idx) + '|' + k + '|' )
+          outf.write( ' '.join([str(x) for x in r1]) )
+          outf.write( '\n' )
+
+        predata = readdata.read_preduserdata_batch()
+
+#    return {'L': len(Xlabel) if allpaddingflag==0 else 0,
+#            'label': Xlabel, 'id': Xid, 'uin': Xuin,
+#            'bizclass': Xbizclass, 'vtitleseg': Xvtitleseg, 'vtitlelen': Xvtitlelen,
+#            'restart': restart, 'padding': Xpadding}
 
 def str2bool(v):
   if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -291,19 +349,24 @@ def str2bool(v):
   else:
     raise argparse.ArgumentTypeError('Boolean value expected.')
 
-
 def parse_args():
   parser = argparse.ArgumentParser(description="Run Vedio Classify NN.")
   parser.add_argument('--pred', type=str2bool, default=False,
                       help='Using pred function.')
   parser.add_argument('--inputpath', nargs='?', default='data/',
                       help='Input data path.')
-  parser.add_argument('--predset', nargs='+', default=['cdatabizuinpic'],
+  parser.add_argument('--predvedioset', nargs='+', default=['smbvedio.v2'], #default=['smbvedio.v2'],  []
                       help='Choose a pred dataset.')
-  parser.add_argument('--predoutputfile', nargs='?', default='vedio.pred',
+  parser.add_argument('--preduserset', nargs='+', default=['smbuser.v2'],
                       help='Choose a pred dataset.')
-  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\dnn-model-20180613143500-500',
-                      help='Path to save the model.')
+  parser.add_argument('--predvediooutput', nargs='?', default='vedio.pred',
+                      help='Choose a pred dataset.')
+  parser.add_argument('--preduseroutput', nargs='?', default='user.pred',
+                      help='Choose a pred dataset.')
+  parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\rnn-model-20180829171255-500',
+                      help='Path to save the model.')                      
+  parser.add_argument('--batch_size', type=int, default=10240,
+                      help='Data batch size')
 
   return parser.parse_args()
 
@@ -315,27 +378,41 @@ if __name__ == "__main__":
 
   if args.pred:
     param.update(vars(args))
-    readdata = SMBAnsyInput(param)
+    readdata = SMBAnsyInputV2(param)
     model = SMBEmb(param, readdata.vocab)
+    
+    if len(args.predvedioset)>0:
+      outfname = args.inputpath + os.sep + args.predvediooutput
+  
+      if Py3:
+        with open(outfname, 'w', encoding="utf-8") as outf:
+          model.infervedio(readdata, outf)
+      else:
+        import sys
+        reload(sys)
+        sys.setdefaultencoding("utf-8")
+        with codecs.open(outfname, 'w', encoding='utf-8') as outf:
+          print('Using codecs.open')
+          model.infervedio(readdata, outf)
 
-    outfname = args.inputpath + os.sep + args.predoutputfile
-
-    if Py3:
-      with open(outfname, 'w', encoding="utf-8") as outf:
-        model.infer(readdata, outf)
-    else:
-      import sys
-      reload(sys)
-      sys.setdefaultencoding("utf-8")
-      with codecs.open(outfname, 'w', encoding='utf-8') as outf:
-        print('Using codecs.open')
-        model.infer(readdata, outf)
+    if len(args.preduserset)>0:
+      outfname = args.inputpath + os.sep + args.preduseroutput
+  
+      if Py3:
+        with open(outfname, 'w', encoding="utf-8") as outf:
+          model.inferuser(readdata, outf)
+      else:
+        import sys
+        reload(sys)
+        sys.setdefaultencoding("utf-8")
+        with codecs.open(outfname, 'w', encoding='utf-8') as outf:
+          print('Using codecs.open')
+          model.inferuser(readdata, outf)          
+          
 
   else:
-    readdata = SMBAnsyInput(param)
+    readdata = SMBAnsyInputV2(param)
     readdata.start_ansyc()
     model = SMBEmb(param, readdata.vocab)
     model.train(readdata)
     readdata.stop_and_wait_ansyc()
-
-
