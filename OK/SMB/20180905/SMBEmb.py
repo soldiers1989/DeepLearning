@@ -188,10 +188,9 @@ class SMBEmb():
     ##----------------------------fc layer
     with tf.name_scope('fc') as scope:
       level1_dim = 3 * self.args['emb_size']
-      self.fcx_w0, self.fcx_b0 = TFBCUtils.create_w_b(level1_dim, self.args['emb_size'], w_name="fcx_w0", b_name="fcx_b0")
-      self.fcy_w0, self.fcy_b0 = TFBCUtils.create_w_b(level1_dim, self.args['emb_size'], w_name="fcy_w0", b_name="fcy_b0")
-      self.Xitemembn2 = tf.nn.l2_normalize(tf.nn.relu(tf.matmul(self.Xconcat_item, self.fcx_w0) + self.fcx_b0), 1)
-      self.Yitemembn2 = tf.nn.l2_normalize(tf.nn.relu(tf.matmul(self.Yconcat_item, self.fcy_w0) + self.fcy_b0), 1)
+      self.fc1_w0, self.fc1_b0 = TFBCUtils.create_w_b(level1_dim, self.args['emb_size'], w_name="fc1_w0", b_name="fc1_b0")
+      self.Xitemembn2 = tf.nn.l2_normalize(tf.nn.relu(tf.matmul(self.Xconcat_item, self.fc1_w0) + self.fc1_b0), 1)
+      self.Yitemembn2 = tf.nn.l2_normalize(tf.nn.relu(tf.matmul(self.Yconcat_item, self.fc1_w0) + self.fc1_b0), 1)
 
     with tf.name_scope('rnn') as scope:
       self.stacked_cell = rnn_cell.MultiRNNCell([self.get_rnn_cell() for _ in range(self.args['layers'])])
