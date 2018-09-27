@@ -266,7 +266,7 @@ class DeepWide(BaseEstimator, TransformerMixin):
     z = tf.cond(train_phase, lambda: bn_train, lambda: bn_inference)  # Ԥ���ѵ���߲�ͬ�ķ�֧
     return z
 
-  def partial_fit(self, data, summary_writer, step):  # fit a batch
+  def partial_fit(self, data, summary_writer, step):  # fit a getbatch
     feed_dict = {self.train_features: data['X'],
                  self.train_labels: [[y] for y in data['Y']],
                  self.dropout_keep: self.keep_prob,
@@ -398,7 +398,7 @@ def parse_args():
   parser.add_argument('--verbose', type=int, default=1,
                       help='Show the results per X epochs (0, 1 ... any positive integer)')
   parser.add_argument('--batch_norm', type=int, default=0,
-                      help='Whether to perform batch normaization (0 or 1)')
+                      help='Whether to perform getbatch normaization (0 or 1)')
   parser.add_argument('--activation', nargs='?', default='relu',
                       help='Which activation function to use for deep layers: relu, sigmoid, tanh, identity')
   parser.add_argument('--early_stop', type=int, default=1,

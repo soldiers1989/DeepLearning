@@ -704,7 +704,7 @@ if __name__ == '__main__':
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
   parser.add_argument('--batch_size', type=int, default=10,
-                      help='Data batch size')
+                      help='Data getbatch size')
   parser.add_argument('--remove_feature', nargs='*', default=[], required=False,
                       help='Remove Some Feature')
   parser.add_argument('--remove_lowfeq', type=int, default=0,

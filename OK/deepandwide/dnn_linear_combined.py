@@ -714,7 +714,7 @@ class DNNLinearCombinedClassifier(estimator.Estimator):
     Args:
       x: features.
       input_fn: Input function. If set, x must be None.
-      batch_size: Override default batch size.
+      batch_size: Override default getbatch size.
       outputs: list of `str`, name of the output to predict.
         If `None`, returns classes.
       as_iterable: If True, return an iterable which keeps yielding predictions
@@ -751,7 +751,7 @@ class DNNLinearCombinedClassifier(estimator.Estimator):
     Args:
       x: features.
       input_fn: Input function. If set, x must be None.
-      batch_size: Override default batch size.
+      batch_size: Override default getbatch size.
       as_iterable: If True, return an iterable which keeps yielding predictions
         for each example until inputs are exhausted. Note: The inputs must
         terminate if you want the iterable to terminate (e.g. be sure to pass
@@ -783,7 +783,7 @@ class DNNLinearCombinedClassifier(estimator.Estimator):
     Args:
       x: features.
       input_fn: Input function. If set, x and y must be None.
-      batch_size: Override default batch size.
+      batch_size: Override default getbatch size.
       as_iterable: If True, return an iterable which keeps yielding predictions
         for each example until inputs are exhausted. Note: The inputs must
         terminate if you want the iterable to terminate (e.g. be sure to pass
@@ -1064,7 +1064,7 @@ class DNNLinearCombinedRegressor(estimator.Estimator):
     Args:
       x: features.
       input_fn: Input function. If set, x must be None.
-      batch_size: Override default batch size.
+      batch_size: Override default getbatch size.
       outputs: list of `str`, name of the output to predict.
         If `None`, returns scores.
       as_iterable: If True, return an iterable which keeps yielding predictions
@@ -1101,7 +1101,7 @@ class DNNLinearCombinedRegressor(estimator.Estimator):
     Args:
       x: features.
       input_fn: Input function. If set, x must be None.
-      batch_size: Override default batch size.
+      batch_size: Override default getbatch size.
       as_iterable: If True, return an iterable which keeps yielding predictions
         for each example until inputs are exhausted. Note: The inputs must
         terminate if you want the iterable to terminate (e.g. be sure to pass

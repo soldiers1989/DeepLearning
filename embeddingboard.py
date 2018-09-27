@@ -7,10 +7,10 @@ from tensorflow.contrib.tensorboard.plugins import projector
 logdir='log'
 # load model
 df_train = pd.read_csv(
-    tf.gfile.Open('.'+os.sep+'data'+os.sep+'vedio20000.pred'),
+    tf.gfile.Open('.'+os.sep+'data'+os.sep+'msg.pred'),
     skipinitialspace=True, 
     engine="python",
-    sep=' ',
+    delimiter=' ',
     skiprows=0)
 
 df_train.columns = ['key']+[str(x) for x in range(100)]

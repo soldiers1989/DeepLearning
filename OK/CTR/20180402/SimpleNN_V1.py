@@ -172,7 +172,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
     z = tf.cond(train_phase, lambda: bn_train, lambda: bn_inference)  #预测和训练走不同的分支
     return z
 
-  def partial_fit(self, data):  # fit a batch
+  def partial_fit(self, data):  # fit a getbatch
     #feed_dict = {self.train_features: data['X'], self.train_labels: data['Y'], self.dropout_keep: self.keep_prob, self.train_phase: True}
     feed_dict = {self.train_features: data['X'], self.train_labels: [[y] for y in data['Y']], self.dropout_keep: self.keep_prob, self.train_phase: True}
     loss, opt = self.sess.run((self.loss, self.optimizer), feed_dict=feed_dict)
@@ -275,7 +275,7 @@ def parse_args():
   parser.add_argument('--verbose', type=int, default=1,
             help='Show the results per X epochs (0, 1 ... any positive integer)')
   parser.add_argument('--batch_norm', type=int, default=0,
-          help='Whether to perform batch normaization (0 or 1)')
+          help='Whether to perform getbatch normaization (0 or 1)')
   parser.add_argument('--activation', nargs='?', default='relu',
           help='Which activation function to use for deep layers: relu, sigmoid, tanh, identity')
   parser.add_argument('--early_stop', type=int, default=1,
@@ -292,7 +292,7 @@ if __name__ == '__main__':
   testdata = LoadLibSvmData(dim=args.dim, files=testset)
 
   if args.verbose > 0:
-    print("Neural FM: dataset=%s, testset=%s, dropout_keep=%s, layers=%s, loss_type=%s, #epoch=%d, batch=%d, lr=%.4f,optimizer=%s, batch_norm=%d, activation=%s, early_stop=%d"
+    print("Neural FM: dataset=%s, testset=%s, dropout_keep=%s, layers=%s, loss_type=%s, #epoch=%d, getbatch=%d, lr=%.4f,optimizer=%s, batch_norm=%d, activation=%s, early_stop=%d"
         %(args.dataset, args.testset, args.keep_prob, args.layers, args.loss_type, args.epoch, args.batch_size, args.lr, args.optimizer, args.batch_norm, args.activation, args.early_stop))
   activation_function = tf.nn.relu
   if args.activation == 'sigmoid':

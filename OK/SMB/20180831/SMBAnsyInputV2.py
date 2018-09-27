@@ -3,7 +3,6 @@
 
 import argparse
 import codecs
-import datetime
 import os
 import random
 import sys
@@ -558,9 +557,9 @@ if __name__ == '__main__':
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
   parser.add_argument('--batch_size', type=int, default=3,
-                      help='Data batch size')
+                      help='Data getbatch size')
   parser.add_argument('--batch_size_test', type=int, default=5,
-                      help='Data batch size')
+                      help='Data getbatch size')
   args = parser.parse_args()
   print(vars(args))
 

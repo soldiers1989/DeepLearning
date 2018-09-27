@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-import os
-import pickle
-import random
-import datetime
-import threading
-import codecs
-import numpy as np
 import argparse
-from TFBCUtils import Vocab
-from itertools import product
+import codecs
+import datetime
+import os
+import random
+import sys
+import threading
 from itertools import islice
+
+import numpy as np
+from TFBCUtils import Vocab
+
 Py3 = sys.version_info[0] == 3
 if Py3:
   from queue import Queue
@@ -486,9 +486,9 @@ if __name__ == '__main__':
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
   parser.add_argument('--batch_size', type=int, default=5,
-                      help='Data batch size')
+                      help='Data getbatch size')
   parser.add_argument('--batch_size_test', type=int, default=5,
-                      help='Data batch size')
+                      help='Data getbatch size')
   args = parser.parse_args()
   print(vars(args))
   readdata = VedioClassifyBizuinInputAnsyEmb(vars(args))

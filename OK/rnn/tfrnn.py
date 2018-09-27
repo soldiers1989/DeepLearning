@@ -43,7 +43,7 @@ def gen_batch(raw_data, batch_size, num_steps):
   for i in range(batch_size):
     data_x[i] = raw_x[batch_partition_length * i:batch_partition_length * (i + 1)]
     data_y[i] = raw_y[batch_partition_length * i:batch_partition_length * (i + 1)]
-  # further divide batch partitions into num_steps for truncated backprop
+  # further divide getbatch partitions into num_steps for truncated backprop
   epoch_size = batch_partition_length // num_steps
 
   for i in range(epoch_size):

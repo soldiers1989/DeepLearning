@@ -4,13 +4,10 @@
 from __future__ import print_function
 
 import argparse
-import datetime
-import os
-import sys
-import time
 
 import numpy as np
 from TFBCUtils import Vocab
+
 
 def loadvedio(args):
   vedioemb = np.zeros( (args.vedio_size, args.emb_size), dtype = np.float32 ) + 10

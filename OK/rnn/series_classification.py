@@ -68,7 +68,11 @@ class ToySequenceData(object):
 tmp = ToySequenceData()
 
 # 生成样本
-batch_data, batch_labels, batch_seqlen = tmp.next(32)
+batch_data, batch_labels, batch_seqlen = tmp.next(32)  # 输入x的形状： (batch_size, max_seq_len, n_input)
+
+#batch_data, batch_labels, batch_seqlen = tmp.next(1)
+#[[[0.489],[0.49],[0.491],...]]  [[1.0, 0.0]]   [11]
+
 
 # batch_data是序列数据，它是一个嵌套的list，形状为(batch_size, max_seq_len, 1)
 print(np.array(batch_data).shape)  # (32, 20, 1)

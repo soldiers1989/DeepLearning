@@ -9,12 +9,11 @@ import os
 import sys
 import time
 
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
+from ToutiaoSimInput import SMBAnsyInput
 from tensorflow.python.ops import rnn_cell
-from SMBAnsyInputV2 import SMBAnsyInput
-
-import TFBCUtils
 
 Py3 = sys.version_info[0] == 3
 if not Py3: import codecs

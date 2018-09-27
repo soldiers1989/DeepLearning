@@ -13,7 +13,6 @@ import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioClassifyBizuinInputAnsyEmb import VedioClassifyBizuinInputAnsyEmb
-from TFBCUtils import Vocab
 
 Py3 = sys.version_info[0] == 3
 if not Py3: import codecs

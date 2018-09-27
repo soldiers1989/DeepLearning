@@ -21,7 +21,7 @@ def ptb_iterator(raw_data, batch_size, num_steps, steps_ahead=1):
   minibatch iteration along these pointers.
   Args:
     raw_data: one of the raw data outputs from ptb_raw_data.
-    batch_size: int, the batch size.
+    batch_size: int, the getbatch size.
     num_steps: int, the number of unrolls.
   Yields:
     Pairs of the batched data, each a matrix of shape [batch_size, num_steps].

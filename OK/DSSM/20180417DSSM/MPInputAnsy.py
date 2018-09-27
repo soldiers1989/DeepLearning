@@ -418,7 +418,7 @@ if __name__ == '__main__':
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
   parser.add_argument('--batch_size', type=int, default=2,
-                      help='Data batch size')
+                      help='Data getbatch size')
   #parser.add_argument('--dim', type=int, default=12540,
   parser.add_argument('--dim', type=int, default=64,
                       help='Data dim')

@@ -252,7 +252,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
     z = tf.cond(train_phase, lambda: bn_train, lambda: bn_inference)
     return z
 
-  def partial_fit(self, data, summary_writer, step):  # fit a batch
+  def partial_fit(self, data, summary_writer, step):  # fit a getbatch
     if len(data['Y']) == 0:
       return 0.0
     current_step = tf.train.global_step(self.sess, self.global_step)
@@ -398,7 +398,7 @@ def parse_args():
   parser.add_argument('--batch_size', type=int, default=128,
                       help='Batch size.')
   parser.add_argument('--batch_size_test', type=int, default=128,
-                      help='Data batch size')
+                      help='Data getbatch size')
   parser.add_argument('--layers', nargs='?', default='[128, 64]',
                       help="Size of each layer.")
   parser.add_argument('--keep_prob', nargs='?', default='[0.8,0.5]',
@@ -412,7 +412,7 @@ def parse_args():
   parser.add_argument('--verbose', type=int, default=1,
                       help='Show the results per X epochs (0, 1 ... any positive integer)')
   parser.add_argument('--batch_norm', type=int, default=0,
-                      help='Whether to perform batch normaization (0 or 1)')
+                      help='Whether to perform getbatch normaization (0 or 1)')
   parser.add_argument('--activation', nargs='?', default='relu',
                       help='Which activation function to use for deep layers: relu, sigmoid, tanh, identity')
   parser.add_argument('--early_stop', type=int, default=1,

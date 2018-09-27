@@ -9,12 +9,11 @@ import os
 import sys
 import time
 
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
+from ToutiaoSimInput import SMBAnsyInputV2
 from tensorflow.python.ops import rnn_cell
-from SMBAnsyInputV2 import SMBAnsyInputV2
-
-import TFBCUtils
 
 Py3 = sys.version_info[0] == 3
 if not Py3: import codecs
@@ -348,7 +347,7 @@ def parse_args():
   parser.add_argument('--ckpt', nargs='?', default='D:\\DeepLearning\\model\\rnn-model-20180904163344-500',
                       help='Path to save the model.')
   parser.add_argument('--batch_size', type=int, default=16,
-                      help='Data batch size')
+                      help='Data getbatch size')
 
   return parser.parse_args()
 

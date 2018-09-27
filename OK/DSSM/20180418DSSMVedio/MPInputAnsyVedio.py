@@ -447,7 +447,7 @@ if __name__ == '__main__':
   parser.add_argument('--shuffle_file', type=str2bool, default=True,
                       help='Suffle input file')
   parser.add_argument('--batch_size', type=int, default=2,
-                      help='Data batch size')
+                      help='Data getbatch size')
   parser.add_argument('--dimquery', type=int, default=5799,  #13715
                       help='Data dim query')
   parser.add_argument('--dimdoc', type=int, default=4858,  #12774

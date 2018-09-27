@@ -9,11 +9,10 @@ import math
 import os
 import sys
 
+import TFBCUtils
 import numpy as np
 import tensorflow as tf
 from VedioTagNCEInputAnsy import VedioTagNCEInputAnsy
-
-import TFBCUtils
 
 Py3 = sys.version_info[0] == 3
 if not Py3: import codecs

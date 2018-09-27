@@ -56,7 +56,7 @@ def parse_args():
     parser.add_argument('--verbose', type=int, default=1,
                         help='Show the results per X epochs (0, 1 ... any positive integer)')
     parser.add_argument('--batch_norm', type=int, default=1,
-                    help='Whether to perform batch normaization (0 or 1)')
+                    help='Whether to perform getbatch normaization (0 or 1)')
     parser.add_argument('--activation', nargs='?', default='relu',
                     help='Which activation function to use for deep layers: relu, sigmoid, tanh, identity')
     parser.add_argument('--early_stop', type=int, default=1,
@@ -254,7 +254,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
         z = tf.cond(train_phase, lambda: bn_train, lambda: bn_inference)  #预测和训练走不同的分支
         return z
 
-    def partial_fit(self, data):  # fit a batch
+    def partial_fit(self, data):  # fit a getbatch
         feed_dict = {self.train_features: data['X'], self.train_labels: data['Y'], self.dropout_keep: self.keep_prob, self.train_phase: True}
         loss, opt = self.sess.run((self.loss, self.optimizer), feed_dict=feed_dict)
         return loss
@@ -302,7 +302,7 @@ class NeuralFM(BaseEstimator, TransformerMixin):
             self.shuffle_in_unison_scary(Train_data['X'], Train_data['Y'])
             total_batch = int(len(Train_data['Y']) / self.batch_size)
             for i in range(total_batch):
-                # generate a batch
+                # generate a getbatch
                 batch_xs = self.get_random_block_from_data(Train_data, self.batch_size)
                 # Fit training
                 self.partial_fit(batch_xs)
@@ -363,7 +363,7 @@ if __name__ == '__main__':
     args = parse_args()
     data = DATA.LoadData(args.path, args.dataset, args.loss_type)
     if args.verbose > 0:
-        print("Neural FM: dataset=%s, hidden_factor=%d, dropout_keep=%s, layers=%s, loss_type=%s, pretrain=%d, #epoch=%d, batch=%d, lr=%.4f, lambda=%.4f, optimizer=%s, batch_norm=%d, activation=%s, early_stop=%d"
+        print("Neural FM: dataset=%s, hidden_factor=%d, dropout_keep=%s, layers=%s, loss_type=%s, pretrain=%d, #epoch=%d, getbatch=%d, lr=%.4f, lambda=%.4f, optimizer=%s, batch_norm=%d, activation=%s, early_stop=%d"
               %(args.dataset, args.hidden_factor, args.keep_prob, args.layers, args.loss_type, args.pretrain, args.epoch, args.batch_size, args.lr, args.lamda, args.optimizer, args.batch_norm, args.activation, args.early_stop))
     activation_function = tf.nn.relu
     if args.activation == 'sigmoid':
