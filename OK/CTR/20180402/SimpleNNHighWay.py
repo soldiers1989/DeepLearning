@@ -308,8 +308,7 @@ class SimpleNN(BaseEstimator, TransformerMixin):
         self.valid_rmse.append(valid_result)
         if self.verbose > 0 and epoch % self.verbose == 0:
           print("Epoch %d [%.1f s]\ttrain=%.4f auc=%.4f, valid=%.4f auc=%.4f, loss=%.4f [%.1f s]"
-                % (
-                epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
+                % (epoch + 1, t2 - t1, train_result, train_result_auc, valid_result, valid_result_auc, loss, time() - t2))
 
         t1 = time()
 
