@@ -4,6 +4,7 @@
 
 import os
 import numpy as np
+import pickle
 import tensorflow as tf
 print("TensorFlow Version: %s" % tf.__version__)
 import matplotlib.pyplot as plt
@@ -87,11 +88,17 @@ smooth = 0.1
 
 tf.reset_default_graph()
 real_img, noise_img = get_inputs(img_size, noise_size)
+#Tensor("real_img:0", shape=(?, 784 28*28), dtype=float32)  Tensor("noise_img:0", shape=(?, 100), dtype=float32)
+
 # generator
 g_logits, g_outputs = get_generator(noise_img, g_units, img_size)
+#Tensor("generator/dense_2/BiasAdd:0", shape=(?, 784), dtype=float32) Tensor("generator/Tanh:0", shape=(?, 784), dtype=float32)
+
 # discriminator
 d_logits_real, d_outputs_real = get_discriminator(real_img, d_units)
+#Tensor("discriminator/dense_2/BiasAdd:0", shape=(?, 1), dtype=float32) Tensor("discriminator/Sigmoid:0", shape=(?, 1), dtype=float32)
 d_logits_fake, d_outputs_fake = get_discriminator(g_outputs, d_units, reuse=True)
+#Tensor("discriminator_1/dense_2/BiasAdd:0", shape=(?, 1), dtype=float32) Tensor("discriminator_1/Sigmoid:0", shape=(?, 1), dtype=float32)
 
 #这里简单说一下Loss的计算方式，由于我们上面构建了两个神经网络：generator和discriminator，因此需要分别计算loss。
 #discriminator discriminator的目的在于对于给定的真图片，识别为真（1），对于generator生成的图片，识别为假（0），
@@ -125,11 +132,12 @@ g_train_opt = tf.train.AdamOptimizer(learning_rate).minimize(g_loss, var_list=g_
 # batch_size
 batch_size = 64
 # 训练迭代轮数
-epochs = 300
+epochs = 600
 # 抽取样本数
 n_sample = 25
 
 # 存储测试样例
+sample_noise = np.random.uniform(-1, 1, size=(n_sample, noise_size))
 samples = []
 # 存储loss
 losses = []
@@ -150,21 +158,22 @@ with tf.Session() as sess:
             batch_noise = np.random.uniform(-1, 1, size=(batch_size, noise_size))
             
             # Run optimizers
-            _ = sess.run(d_train_opt, feed_dict={real_img: batch_images, noise_img: batch_noise})
+            _ = sess.run(d_train_opt, feed_dict={real_img:  batch_images, 
+                                                 noise_img: batch_noise})
             _ = sess.run(g_train_opt, feed_dict={noise_img: batch_noise})
         
         # 每一轮结束计算loss
         train_loss_d = sess.run(d_loss, 
-                                feed_dict = {real_img: batch_images, 
+                                feed_dict = {real_img:  batch_images, 
                                              noise_img: batch_noise})
         # real img loss
         train_loss_d_real = sess.run(d_loss_real, 
-                                     feed_dict = {real_img: batch_images, 
-                                                 noise_img: batch_noise})
+                                     feed_dict = {real_img:  batch_images, 
+                                                  noise_img: batch_noise})
         # fake img loss
         train_loss_d_fake = sess.run(d_loss_fake, 
-                                    feed_dict = {real_img: batch_images, 
-                                                 noise_img: batch_noise})
+                                     feed_dict = {real_img:  batch_images, 
+                                                  noise_img: batch_noise})
         # generator loss
         train_loss_g = sess.run(g_loss, 
                                 feed_dict = {noise_img: batch_noise})
@@ -177,7 +186,7 @@ with tf.Session() as sess:
         losses.append((train_loss_d, train_loss_d_real, train_loss_d_fake, train_loss_g))
         
         # 抽取样本后期进行观察
-        sample_noise = np.random.uniform(-1, 1, size=(n_sample, noise_size))
+        #sample_noise = np.random.uniform(-1, 1, size=(n_sample, noise_size))
         gen_samples = sess.run(get_generator(noise_img, g_units, img_size, reuse=True),
                                feed_dict={noise_img: sample_noise})
         samples.append(gen_samples)
@@ -220,7 +229,7 @@ _ = view_samples(-1, samples) # 显示最后一轮的outputs
 
 
 # 指定要查看的轮次
-epoch_idx = [0, 5, 10, 20, 40, 60, 80, 100, 150, 250] # 一共300轮，不要越界
+epoch_idx = [0, 5, 10, 20, 40, 80, 150, 250, 500] # 一共300轮，不要越界
 show_imgs = []
 for i in epoch_idx:
     show_imgs.append(samples[i][1])
@@ -236,7 +245,8 @@ for sample, ax_row in zip(show_imgs, axes):
         ax.imshow(img.reshape((28,28)), cmap='Greys_r')
         ax.xaxis.set_visible(False)
         ax.yaxis.set_visible(False)
-        
+plt.show()
+
 # 加载我们的生成器变量
 saver = tf.train.Saver(var_list=g_vars)
 with tf.Session() as sess:
@@ -244,7 +254,7 @@ with tf.Session() as sess:
     sample_noise = np.random.uniform(-1, 1, size=(25, noise_size))
     gen_samples = sess.run(get_generator(noise_img, g_units, img_size, reuse=True),
                            feed_dict={noise_img: sample_noise})
-                           	
+                            
 _ = view_samples(0, [gen_samples])
 
     

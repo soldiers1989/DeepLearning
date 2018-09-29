@@ -184,4 +184,6 @@ def pred(batch_x):
 		ret = sess.run([prediction], feed_dict={x: batch_x})
 	return ret
 
-ret=pred(mnist.test.images[10:20])
+batch_x, _ = mnist.test.next_batch(batch_size)
+
+ret=pred(batch_x)
