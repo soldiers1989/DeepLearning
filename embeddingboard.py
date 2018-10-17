@@ -7,7 +7,7 @@ from tensorflow.contrib.tensorboard.plugins import projector
 logdir='log'
 # load model
 df_train = pd.read_csv(
-    tf.gfile.Open('.'+os.sep+'data'+os.sep+'msg.pred'),
+    tf.gfile.Open('.'+os.sep+'data'+os.sep+'mp.pred'),
     skipinitialspace=True, 
     engine="python",
     delimiter=' ',

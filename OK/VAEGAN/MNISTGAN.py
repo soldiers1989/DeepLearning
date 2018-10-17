@@ -132,7 +132,7 @@ g_train_opt = tf.train.AdamOptimizer(learning_rate).minimize(g_loss, var_list=g_
 # batch_size
 batch_size = 64
 # 训练迭代轮数
-epochs = 600
+epochs = 100
 # 抽取样本数
 n_sample = 25
 
@@ -192,7 +192,7 @@ with tf.Session() as sess:
         samples.append(gen_samples)
         
         # 存储checkpoints
-        saver.save(sess, './checkpoints/generator.ckpt')
+        saver.save(sess, './log/generator.ckpt')
 
 # 将sample的生成数据记录下来
 with open('train_samples.pkl', 'wb') as f:

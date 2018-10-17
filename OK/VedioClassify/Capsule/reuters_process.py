@@ -4,7 +4,7 @@ import re
 import operator
 
 import sys
-reload(sys)
+#reload(sys)
 sys.setdefaultencoding('utf8')
 
 from nltk import word_tokenize
@@ -35,7 +35,7 @@ def load_bin_vec(fname, vocab):
         header = f.readline()
         vocab_size, layer1_size = map(int, header.split())
         binary_len = np.dtype('float32').itemsize * layer1_size
-        for line in xrange(vocab_size):
+        for line in range(vocab_size):
             word = []
             while True:
                 ch = f.read(1)

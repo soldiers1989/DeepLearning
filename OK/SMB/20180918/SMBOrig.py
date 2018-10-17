@@ -12,7 +12,7 @@ import time
 import TFBCUtils
 import numpy as np
 import tensorflow as tf
-from ToutiaoSimInput import SMBAnsyInputV2
+from SMBAnsyInputV2 import SMBAnsyInputV2
 from tensorflow.python.ops import rnn_cell
 
 Py3 = sys.version_info[0] == 3
@@ -46,7 +46,7 @@ param = {
     'titlemax_size': 20,
     'articlemax_size': 200,
 
-    'vocab': 'data/model2.vec.proc',
+    'vocab': 'data/model2.vec2.proc',
     'vocab_size': 100,
     'kernel_sizes': [2, 3],
     'filters': 2
@@ -116,6 +116,8 @@ class SMBEmb():
 
     def bpr(self, yhat):
         yhatT = tf.transpose(yhat)
+        print('yhat %s'%str(yhat))
+        print('yhatT %s'%str(yhatT))
         return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.diag_part(yhat) - yhatT)))
 
     def top1(self, yhat):
@@ -471,7 +473,7 @@ def str2bool(v):
 
 def parse_args():  # --tasks dailytrain --inputpath data/ --modelpath model/
     parser = argparse.ArgumentParser(description="Run Vedio Classify NN.")
-    parser.add_argument('--tasks', nargs='+', default=['preduser'],
+    parser.add_argument('--tasks', nargs='+', default=['train'],
                         # ['train', 'dailytrain', 'predvedio', 'preduserset', 'preduser', 'preduserseq'],
                         help='Using pred function.')
     parser.add_argument('--inputpath', nargs='?', default='data/',

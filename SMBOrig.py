@@ -116,6 +116,8 @@ class SMBEmb():
 
     def bpr(self, yhat):
         yhatT = tf.transpose(yhat)
+        print('yhat %s'%str(yhat))
+        print('yhatT %s'%str(yhatT))
         return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.diag_part(yhat) - yhatT)))
 
     def top1(self, yhat):

@@ -38,31 +38,32 @@ param = {
   'titlemax_size': 20,
   'contentmax_size': 200,
 
-  'vocab': 'data/ttmodel.vec.num',
+  'vocab': 'data/model.vec.num',
   'vocab_size': 1000,
   'kernel_sizes': [1, 2],
   'filters': 2
 }
 
 param2 = {
-  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/train',
-  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/model',
+  'inputpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/20181007/train/',
+  'modelpath': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/20181007/model/',
 
   'dataset': ['part-00000','part-00002','part-00004','part-00006','part-00008','part-00010','part-00012','part-00014','part-00016','part-00018',\
               'part-00001','part-00003','part-00005','part-00007','part-00009','part-00011','part-00013','part-00015','part-00017','part-00019'],
   'testset': [],
   'predset': [],
 
-  'batch_size': 128,
+  'batch_size': 64,
   'batch_size_test': 4096,
-  'test_batch': 1000,
+  'test_batch': 100,
   'save_batch': 5000,
   'total_batch': 400000,
   'decay_steps': 5000,
+  'margin': 0.3,
   'keep_prob': 0.5,
 
-  'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/fasttext/ttmodel.vec.num',
-  'vocab_size': 127352,
+  'vocab': '/mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/fasttext/model.vec.num',
+  'vocab_size': 333294,
   'kernel_sizes': [1, 2, 3, 4],
   'filters': 200
 }
@@ -78,6 +79,9 @@ def str2bool(v):
     raise argparse.ArgumentTypeError('Boolean value expected.')
 
 def parse_args():  # --tasks dailytrain --inputpath data/ --modelpath model/
+	# --inputpath /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/20181007/article/ --predset part-00000 part-00001 part-00002 --tasks predmsg --ckpt /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/20181007/model/toutiao-model-20181009112350-25000
+	
+	# python ToutiaoSimRun.py --inputpath /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/20181007/mptmp/ --predset part-00000 part-00002 part-00004 part-00006 part-00001 part-00003 part-00005 part-00007 part-00009 part-00008 --tasks predmsg --ckpt /mnt/yardcephfs/mmyard/g_wxg_ob_dc/bincai/toutiao/20181007/model/toutiao-model-20181009112350-60000
   parser = argparse.ArgumentParser(description="Run Vedio Classify NN.")
   parser.add_argument('--tasks', nargs='+', default=['train'],
                       # ['train', 'dailytrain', 'predmsg'],

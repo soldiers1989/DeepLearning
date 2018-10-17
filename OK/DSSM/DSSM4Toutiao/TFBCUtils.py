@@ -11,7 +11,11 @@ Py3 = sys.version_info[0] == 3
 
 def printmap(amap):
   for key, values in amap.items():
-  	print('%s --> %s'%(str(key),str(values)))
+    print('%s --> %s'%(str(key),str(values)))
+
+def onehot (x, n):
+  targets = np.array(x).reshape(-1)
+  return np.eye(n)[targets]
 
 def tanh_y (x, w, b, keep_prob=1.0):
   y = tf.matmul(x, w) + b

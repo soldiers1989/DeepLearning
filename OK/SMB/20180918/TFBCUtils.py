@@ -11,7 +11,11 @@ Py3 = sys.version_info[0] == 3
 
 def printmap(amap):
   for key, values in amap.items():
-  	print('%s --> %s'%(str(key),str(values)))
+    print('%s --> %s'%(str(key),str(values)))
+
+def onehot (x, n):
+  targets = np.array(x).reshape(-1)
+  return np.eye(n)[targets]
 
 def tanh_y (x, w, b, keep_prob=1.0):
   y = tf.matmul(x, w) + b
@@ -27,6 +31,16 @@ def softsign_y (x, w, b, keep_prob=1.0):
   y = tf.matmul(x, w) + b
   y = tf.nn.dropout(y, keep_prob)
   return tf.nn.softsign(y)
+  
+def bpr(self, yhat):
+  yhatT = tf.transpose(yhat)
+  return tf.reduce_mean(-tf.log(tf.nn.sigmoid(tf.diag_part(yhat)-yhatT)))
+
+def top1(self, yhat):
+  yhatT = tf.transpose(yhat)
+  term1 = tf.reduce_mean(tf.nn.sigmoid(-tf.diag_part(yhat)+yhatT)+tf.nn.sigmoid(yhatT**2), axis=0)
+  term2 = tf.nn.sigmoid(tf.diag_part(yhat)**2) / self.args['batch_size']
+  return tf.reduce_mean(term1 - term2)
 
 def create_w_b(in_size, out_size, w_name="w", b_name="b", fc_type=tf.float32):
   if (in_size < 1 or out_size < 1):
@@ -68,100 +82,6 @@ def compute_contrastive_loss(model1, model2, y, margin):
     tmp2 = (1 - y) * tf.square(tf.maximum((margin - d),0))
     return tf.reduce_mean(tmp + tmp2) /2
 
-def get_acc(title_z1_out, pos_z1_out, neg_z1_out):
-  sim_pos = np.sum(np.multiply(title_z1_out, pos_z1_out), 1)
-  sim_neg = np.sum(np.multiply(title_z1_out, neg_z1_out), 1)
-  pos_sub_neg = sim_pos - sim_neg
-  total_num = title_z1_out.shape[0]
-  acc_num = 0
-  for i in range(total_num):
-    diff_sim = pos_sub_neg[i]
-    if (diff_sim > 0):
-      acc_num = acc_num + 1
-  acc = acc_num * 1.0 / total_num
-  return acc
-
-def sigmoid(x, derivative=False):
-  return x*(1-x) if derivative else 1/(1+np.exp(-x))
-
-def top3acc(output, label):
-  top3idx = np.argpartition(output, [-3, -2, -1])[:, -3:]
-  return np.mean( np.equal(top3idx[:, -1], label) ), \
-         np.mean( np.sum( np.equal(top3idx, np.transpose([label]*3)), axis=1) ), \
-         top3idx[:, -1]         
-#    print(top3idx)
-#    print([label]*3)
-#    print( np.equal( top3idx, np.transpose([label]*3) ) )
-#    print( np.sum( np.equal(top3idx, np.transpose([label]*3)), axis=1) )
-#    print(label)
-#    print(top3idx, [label])
-
-
-def get_accprecrecauc_mv(title_z1_out, pos_z1_out, neg_z1_out, margin="0.1"):
-  sim_pos = np.sum(np.multiply(title_z1_out, pos_z1_out), 1)
-  sim_neg = np.sum(np.multiply(title_z1_out, neg_z1_out), 1)
-  loss = np.maximum(0., sim_neg - sim_pos + margin)
-  print('-'*20)
-  print('sim_pos %s' % str(sim_pos) )
-  print('sim_neg %s' % str(sim_neg) )
-  print('loss %s' % str(loss) )
-  pos_sub_neg = sim_pos - sim_neg
-  total_num = title_z1_out.shape[0]
-  acc_num = 0
-  for i in range(total_num):
-    diff_sim = pos_sub_neg[i]
-    if (diff_sim > 0):
-      acc_num = acc_num + 1
-  acc = acc_num * 1.0 / total_num
-
-  y_true=[1.0]*title_z1_out.shape[0]
-  y_true.extend([0.0]*title_z1_out.shape[0])
-  y_pred=list(sigmoid(sim_pos))
-  y_pred.extend(list(sigmoid(sim_neg)))
-  auc = roc_auc_score(y_true, y_pred)
-  y_pred = [ 1 if item>0.5 else 0 for item in y_pred ]
-  y_true = [ 1 if item>0.5 else 0 for item in y_true ]
-  return accuracy_score(y_true, y_pred), precision_score(y_true, y_pred, average='binary'), recall_score(y_true, y_pred, average='binary'), auc
-
-
-def get_accprecrecauc(pred, label, cos_similarity_out):
-  pred = [ item[0] for item in pred ]
-  label = [ item[0] for item in label ]
-  cos_similarity = [ item[0] for item in cos_similarity_out ]
-  
-  print('-'*20)
-  if len(cos_similarity)>20:
-    print('cos %s' % str(cos_similarity[:20]) )
-    print('pred %s' % str(pred[:20]) )
-    print('label %s' % str(label[:20]) )
-  else:
-    print('cos %s' % str(cos_similarity) )
-    print('pred %s' % str(pred) )
-    print('label %s' % str(label) )
-  
-  auc = roc_auc_score(label, pred)
-  pred = [ 1 if item>0.5 else 0 for item in pred ]
-  label = [ 1 if item>0.5 else 0 for item in label ]
-  return accuracy_score(label, pred), precision_score(label, pred, average='binary'), recall_score(label, pred, average='binary'), auc
-
-def print_model_data(lv, user_z1_out, pos_z1_out, pos_i, user_i, cos_similarity, pred_out):
-#  print('lv %f'%lv)
-#  print('user_z1_out shape %s'%str(user_z1_out.shape))
-#  print('pos_z1_out shape %s'%str(pos_z1_out.shape))
-#  print('pos_i shape %s'%str(pos_i.shape))
-#  print('user_i shape %s'%str(user_i.shape))
-#  print('cos_similarity shape %s'%str(cos_similarity.shape))
-
-  for ii in range(1):
-  #for ii in range(user_z1_out.shape[0]):
-    print('*'*20+str(ii))
-    print( 'user_i[%d] %s' % (ii, str(user_i[0])) )
-    print( 'user_z1_out[%d] %s' % (ii, str(user_z1_out[0])) )
-    print( 'pos_i[%d] %s' % (ii, str(pos_i[0])) )
-    print( 'pos_z1_out[%d] %s' % (ii, str(pos_z1_out[0])) )
-#    print( 'cos_similarity[%d] %s' % (ii, str(cos_similarity[ii])) )
-#    print( 'pred_out[%d] %s' % (ii, str(pred_out[ii])) )
-
 def get_cnn_feature(f1, f2, f3, b1, b2, b3, title, sentence_len, kernel_sizes):
   #Convolutions
   C1_title = tf.add(tf.nn.conv2d(title, f1, [1,1,1,1], padding='VALID'), b1)
@@ -192,18 +112,38 @@ def create_cnn_param(kernel_sizes, edim, n_filters):
   FB3 = tf.Variable(tf.constant(0.00001, shape=[n_filters]))
   return F1, F2, F3, FB1, FB2, FB3
 
-def output_res(vec_list , title_list, outvec_file):
-  if (vec_list.shape[0] != len(title_list)):
-    print("ERROR, length of title_list not equal length of vec_list")
-    return
-  for i in range(len(title_list)):
-    title = title_list[i].strip()
-    vec   = to_string(vec_list[i])
-    if (not title or not vec):
-      continue
-    outvec_file.write(title + "\t" + vec + '\n')
-  return
+def get_gru_cell(self, size, keep_prob):
+  cell = rnn_cell.GRUCell(size)
+  return rnn_cell.DropoutWrapper(cell, output_keep_prob=keep_prob)
 
+def create_rnn(self, cell, emb_size, x, seqlen, seq_max_len, name):
+  with tf.name_scope(name) as scope:
+    with tf.variable_scope(name):
+      # 输入x的形状： (batch_size, max_seq_len, n_input) 输入seqlen的形状：(batch_size, )
+      # 定义一个lstm_cell，隐层的大小为n_hidden（之前的参数）
+      # self.lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(self.args['emb_size'])
+
+      # 使用tf.nn.dynamic_rnn展开时间维度
+      # 此外sequence_length=seqlen也很重要，它告诉TensorFlow每一个序列应该运行多少步
+      outputs, states = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32, sequence_length=seqlen)
+
+      # outputs的形状为(batch_size, max_seq_len, n_hidden)
+      # 我们希望的是取出与序列长度相对应的输出。如一个序列长度为10，我们就应该取出第10个输出
+      # 但是TensorFlow不支持直接对outputs进行索引，因此我们用下面的方法来做：
+
+      batch_size = tf.shape(outputs)[0]
+      # 得到每一个序列真正的index
+      # tf.range 创建一个数字序列
+      # tf.gather根据索引，从输入张量中依次取元素，构成一个新的张量。
+      #                       [0 1 2] * 20          + [ 9, 18, 19] - 1
+      index = tf.range(0, batch_size) * seq_max_len + (seqlen - 1)  # [ 8 37 58]
+      #                   tf.reshape(outputs, [-1, n_hidden])   size: (60, 64)  60=3*20
+      outputs = tf.gather(tf.reshape(outputs, [-1, emb_size]), index)
+      # size: (3, 64) 取了60里的[ 8 37 58]
+
+      return outputs, states    
+    
+    
 class Vocab(object):
   # Three files are needed in the path
   def __init__(self, filename, emb_size, vocabulary_size=0):
@@ -222,7 +162,7 @@ class Vocab(object):
     def loadfileinner(inf):
       max_wid=0
       for line in inf.readlines():
-        items=line.strip().split(' ')
+        items=line.strip().replace('\t',' ').split(' ')
         if len(items)!=self.emb_size+2:
           print('Error in Vocab.loadfile %d %s' % (len(items), line.strip()))
           continue

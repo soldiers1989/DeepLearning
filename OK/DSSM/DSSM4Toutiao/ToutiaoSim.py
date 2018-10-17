@@ -24,10 +24,10 @@ class ToutiaoSim():
     TFBCUtils.printmap(self.args)
 
     self.vocab=vocab
-    self.output_dim = 28
-    self.output_dim2 = 174
 
+    print('Graph initing')
     self._init_graph()
+    print('Graph inited')
     
   def create_seg_len(self, max_size, name, scopename='seglen' ):
     with tf.name_scope(scopename) as scope:
@@ -139,6 +139,7 @@ class ToutiaoSim():
 
   def train(self, readdata):
     with tf.Session(config=config) as session:
+      print('Before tf.global_variables_initializer()')
       tf.global_variables_initializer().run()
       self.saver = tf.train.Saver()
       ll=0
